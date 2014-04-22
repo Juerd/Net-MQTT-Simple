@@ -32,7 +32,11 @@ sub new {
     my ($class, $server) = @_;
     @_ == 2 or _croak "Wrong number of arguments for $class->new";
 
-    $server .= ":1883" if $server !~ /:/;
+    # Add port for bare IPv6 address
+    $server = "[$server]:1883" if $server =~ /:.*:/ and not $server =~ /\[/;
+
+    # Add port for bare IPv4 address or bracketed IPv6 address
+    $server .= ":1883" if $server !~ /:/ or $server =~ /^\[.*\]$/;
 
     return bless { server => $server }, $class;
 }
