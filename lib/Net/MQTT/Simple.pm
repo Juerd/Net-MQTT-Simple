@@ -79,7 +79,6 @@ sub _send {
 
 sub _publish {
     my ($self, $retain, $topic, $message) = @_;
-    warn $self;
 
     $message //= "" if $retain;
 
