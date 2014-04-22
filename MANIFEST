@@ -1,0 +1,6 @@
+lib/Net/MQTT/Simple.pm
+t/use.t
+Makefile.PL
+README
+Changes
+MANIFEST
