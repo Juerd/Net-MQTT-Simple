@@ -56,6 +56,21 @@ sub _connect {
     );
 }
 
+sub _prepend_variable_length {
+    # Copied from Net::MQTT::Constants
+    my ($data) = @_;
+    my $v = length $data;
+    my $o = "";
+    my $d;
+    do {
+        $d = $v % 128;
+        $v = int($v/128);
+        $d |= 0x80 if $v;
+        $o .= pack "C", $d;
+    } while $d & 0x80;
+    return "$o$data";
+}
+
 sub _send {
     my ($self, $data) = @_;
     my $socket = $self->{socket};
@@ -73,7 +88,8 @@ sub _publish {
     utf8::encode($message);
 
     $self->_send(
-        ($retain ? "\x31" : "\x30") . pack("C/a*",
+        ($retain ? "\x31" : "\x30")
+        . _prepend_variable_length(
             pack("n/a*", $topic) . $message
         )
     );
