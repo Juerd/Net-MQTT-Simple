@@ -3,7 +3,7 @@ package Net::MQTT::Simple;
 # use strict;    # might not be available (e.g. on openwrt)
 # use warnings;  # same.
 
-our $VERSION = '1.00_01';
+our $VERSION = '1.01';
 
 my $global;
 my $socket_class =

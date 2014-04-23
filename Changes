@@ -3,8 +3,8 @@ Revision history for Perl extension DBIx::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
-1.01
-        - ...
+1.01  Wed Apr 23 15:38 2014
+        - Bug fix: $\ is now ignored (e.g. under perl -l)
 
 1.00  Tue Apr 22 23:59 2014
         - Initial release
