@@ -74,7 +74,7 @@ sub _prepend_variable_length {
 sub _send {
     my ($self, $data) = @_;
     my $socket = $self->{socket};
-    print $socket $data;
+    syswrite $socket, $data;
 }
 
 sub _publish {
