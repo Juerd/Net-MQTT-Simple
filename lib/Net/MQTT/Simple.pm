@@ -3,7 +3,7 @@ package Net::MQTT::Simple;
 # use strict;    # might not be available (e.g. on openwrt)
 # use warnings;  # same.
 
-our $VERSION = '1.00';
+our $VERSION = '1.00_01';
 
 my $global;
 my $socket_class =
@@ -136,12 +136,12 @@ Net::MQTT::Simple - Minimal MQTT version 3 publisher
 
     use Net::MQTT::Simple;
 
-    my $mqtt1 = Net::MQTT::simple->new("mosquitto.example.org");
-    my $mqtt2 = Net::MQTT::simple->new("mosquitto.example.com");
+    my $mqtt1 = Net::MQTT::Simple->new("mosquitto.example.org");
+    my $mqtt2 = Net::MQTT::Simple->new("mosquitto.example.com");
 
     for my $server ($mqtt1, $mqtt2) {
-        $server->publish("topic/here", "Message here");
-        $server->retain( "topic/here", "Message here");
+        $server->publish("topic/here" => "Message here");
+        $server->retain( "topic/here" => "Message here");
     }
 
 
