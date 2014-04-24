@@ -16,6 +16,22 @@ sub _croak {
     die sprintf "%s at %s line %d.\n", "@_", (caller 1)[1, 2];
 }
 
+sub _filter_as_regex {
+    my ($filter) = @_;
+
+    return "^(?!\\\$)" if $filter eq '#';   # Match everything except /^\$/
+    return "^(?!\\\$)" if $filter eq '/#';  # Match everything except /^\$/
+
+    $filter = quotemeta $filter;
+
+    $filter =~ s{ \z (?<! \\ \/ \\ \# ) }"\\z"x;       # Anchor unless /#$/
+    $filter =~ s{ \\ \/ \\ \#           }""x;
+    $filter =~ s{ \\ \+                 }"[^/]*"xg;
+    $filter =~ s{ ^ (?= \[ \^ / \] \* ) }"(?!\\\$)"x;  # No /^\$/ if /^\+/
+
+    return "^$filter";
+}
+
 sub import {
     my ($class, $server) = @_;
     @_ <= 2 or _croak "Too many arguments for use " . __PACKAGE__;
