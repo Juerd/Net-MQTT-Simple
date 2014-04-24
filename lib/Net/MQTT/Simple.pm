@@ -26,7 +26,7 @@ sub _filter_as_regex {
 
     $filter =~ s{ \z (?<! \\ \/ \\ \# ) }"\\z"x;       # Anchor unless /#$/
     $filter =~ s{ \\ \/ \\ \#           }""x;
-    $filter =~ s{ \\ \+                 }"[^/]*"xg;
+    $filter =~ s{ \\ \+                 }"[^/]*+"xg;
     $filter =~ s{ ^ (?= \[ \^ / \] \* ) }"(?!\\\$)"x;  # No /^\$/ if /^\+/
 
     return "^$filter";
