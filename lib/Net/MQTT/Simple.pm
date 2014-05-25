@@ -259,6 +259,8 @@ sub tick {
     if ($self->{last_send} <= time() + $KEEPALIVE_INTERVAL) {
         $self->_send("\xc0\0");  # PINGREQ
     }
+
+    return !! $self->{socket};
 }
 
 1;
