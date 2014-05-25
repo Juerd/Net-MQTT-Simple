@@ -269,7 +269,7 @@ __END__
 
 =head1 NAME
 
-Net::MQTT::Simple - Minimal MQTT version 3 publisher
+Net::MQTT::Simple - Minimal MQTT version 3 interface
 
 =head1 SYNOPSIS
 
@@ -287,17 +287,27 @@ Net::MQTT::Simple - Minimal MQTT version 3 publisher
     retain  "topic/here" => "Retained message here";
 
 
-    # Object oriented (supports multiple servers)
+    # Object oriented (supports subscribing to topics)
 
     use Net::MQTT::Simple;
 
-    my $mqtt1 = Net::MQTT::Simple->new("mosquitto.example.org");
-    my $mqtt2 = Net::MQTT::Simple->new("mosquitto.example.com");
+    my $mqtt = Net::MQTT::Simple->new("mosquitto.example.org");
 
-    for my $server ($mqtt1, $mqtt2) {
-        $server->publish("topic/here" => "Message here");
-        $server->retain( "topic/here" => "Message here");
+    $mqtt->publish("topic/here" => "Message here");
+    $mqtt->retain( "topic/here" => "Message here");
+
+    sub callback {
+        my ($topic, $message) = @_;
+        print "[$topic] $message\n";
     }
+
+    $mqtt->run(
+        "sensors/+/temperature" => sub {
+            my ($topic, $message) = @_;
+            die "The building's on fire" if $message > 50;
+        },
+        "#" => \&callback,  # matter of style: inline subs or \& references
+    );
 
 
 =head1 DESCRIPTION
@@ -318,7 +328,8 @@ warnings (on STDERR if you didn't override that) without throwing an exception.
 =head2 Functional interface
 
 This will suffice for most simple sensor scripts. A socket is kept open for
-reuse until the script has finished.
+reuse until the script has finished. The functional interface cannot be used
+for subscriptions, only for publishing.
 
 Instead of requesting symbols to be imported, provide the MQTT server on the
 C<use Net::MQTT::Simple> line. A non-standard port can be specified with a
@@ -346,6 +357,31 @@ To discard a retained topic, provide an empty or undefined message.
 
 Publishes the message with the C<retain> flag off. Use this for ephemeral
 messages about events that occur (like that a button was pressed).
+
+=head1 SUBSCRIPTIONS
+
+=head2 subscribe(topic, handler[, topic, handler, ...])
+
+Subscribes to the given topic(s) and registers the callbacks. Note that only
+the first matching handler will be called for every message, even if filter
+patterns overlap.
+
+=head2 run(...)
+
+Enters an infinite loop, which calls C<tick> repeatedly. If any arguments
+are given, they will be passed to C<subscribe> first.
+
+=head2 tick(timeout)
+
+Test the socket to see if there's any incoming message, waiting at most
+I<timeout> seconds (can be fractional). Use a timeout of C<0> to avoid
+blocking, but note that blocking automatic reconnection may take place, which
+may take much longer.
+
+If C<tick> returns false, this means the socket was no longer connected.
+However, a true value does not necessarily mean that the socket is still
+functional. The only way to reliably determine that a TCP stream is
+still connected, is to write data, which is only done periodically.
 
 =head1 IPv6 PREREQUISITE
 
@@ -385,20 +421,35 @@ indicate that it has already been sent before.
 No username and password are sent to the server and the connection will be set
 up without TLS or SSL.
 
-=item Subscriptions
-
-This is a write-only implementation, meant for sensor equipment.
-
 =item Last will
 
 The server won't publish a "last will" message on behalf of us when our
 connection's gone.
 
-=item Keep-alives
+=item Large data
 
-You'll have to wait for the TCP timeout instead.
+Because everything is handled in memory and there's no way to indicate to the
+server that large messages are not desired, the connection is dropped as soon
+as the server announces a packet larger than 2 megabytes.
+
+=item Validation of server-to-client communication
+
+The MQTT spec prescribes mandatory validation of all incoming data, and
+disconnecting if anything (really, anything) is wrong with it. However, this
+minimal implementation silently ignores anything it doesn't specifically
+handle, which may result in weird behaviour if the server sends out bad data.
+
+Most clients do not adhere to this part of the specifications.
 
 =back
+
+=head1 CAVEATS
+
+Connection and reconnection are handled automatically, but without retries. If
+anything goes wrong, this will cause a single reconnection attempt before the
+following action. For example, if sending a message fails because of a
+disconnected socket, the message will not be resent, but the next message might
+succeed. This behaviour is intended.
 
 =head1 LICENSE
 
