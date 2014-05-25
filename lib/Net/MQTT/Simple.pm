@@ -1,9 +1,13 @@
 package Net::MQTT::Simple;
 
+use IO::Select;
+
 # use strict;    # might not be available (e.g. on openwrt)
 # use warnings;  # same.
 
 our $VERSION = '1.01';
+
+my $KEEPALIVE_INTERVAL = 10;
 
 my $global;
 my $socket_class =
@@ -62,6 +66,8 @@ sub _connect {
 
     return if $self->{socket} and $self->{socket}->connected;
 
+    delete $self->{select};
+
     $self->{socket} = $socket_class->new( PeerAddr => $self->{server} );
     $self->_send(
         "\x10" . pack("C/a*",
@@ -70,6 +76,8 @@ sub _connect {
             )
         )
     );
+
+    $self->_send_subscribe;
 }
 
 sub _prepend_variable_length {
@@ -89,8 +97,90 @@ sub _prepend_variable_length {
 
 sub _send {
     my ($self, $data) = @_;
+
+    $self->_connect;
     my $socket = $self->{socket};
-    syswrite $socket, $data;
+    syswrite $socket, $data
+        or delete $self->{socket};  # reconnect on next message
+
+    $self->{last_send} = time;
+}
+
+sub _send_subscribe {
+    my ($self) = @_;
+
+    return if not exists $self->{sub};
+
+    # Hardcoded "packet identifier" \0\0 for now. Hello? This is TCP.
+    $self->_send("\x82" . _prepend_variable_length(
+        "\0\0" .
+        join("", map "$_\0",
+            map pack("n/a*", $_), keys %{ $self->{sub} } 
+        )
+    ));
+}
+
+sub _parse {
+    my ($self) = @_;
+
+    my $bufref = \$self->{buffer};
+
+    return if length $$bufref < 2;
+
+    my $offset = 1;
+
+    my $length = do {
+        my $multiplier = 1;
+        my $v = 0;
+        my $d;
+        do {
+            return if $offset >= length $$bufref;  # not enough data yet
+            $d = unpack "C", substr $$bufref, $offset++, 1;
+            $v += ($d & 0x7f) * $multiplier;
+            $multiplier *= 128;
+        } while ($d & 0x80);
+        $v;
+    };
+
+    return if $length > (length $$bufref) + $offset;  # not enough data yet
+
+    if ($length > 2e6) {
+        # On receiving an enormous packet, just disconnect to avoid exhausting
+        # RAM on tiny systems.
+        # TODO: just slurp and drop the data
+        # TODO: configurable maximum
+        delete $self->{socket};
+        return;
+    }
+
+    my $first_byte = unpack "C", substr $$bufref, 0, 1;
+
+    my $packet = {
+        type   => ($first_byte & 0xF0) >> 4,
+        dup    => ($first_byte & 0x08) >> 3,
+        qos    => ($first_byte & 0x06) >> 1,
+        retain => ($first_byte & 0x01),
+        data   => substr($$bufref, $offset, $length),
+    };
+
+    substr $$bufref, 0, $offset + $length, "";  # remove the parsed bits.
+
+    return $packet;
+}
+
+sub _incoming_publish {
+    my ($self, $packet) = @_;
+
+    # Because QoS is not supported, no packed ID in the data. It would
+    # have been 16 bits between $topic and $message.
+    my ($topic, $message) = unpack "n/a a*", $packet->{data};
+
+    for my $cb (@{ $self->{callbacks} }) {
+        if ($topic =~ /$cb->{regex}/) {
+            $cb->{callback}->($topic, $message);
+            return;
+        }
+    }
 }
 
 sub _publish {
@@ -98,7 +188,6 @@ sub _publish {
 
     $message //= "" if $retain;
 
-    $self->_connect;
     utf8::encode($topic);
     utf8::encode($message);
 
@@ -122,6 +211,57 @@ sub retain {
     @_ == ($method ? 3 : 2) or _croak "Wrong number of arguments for retain";
 
     ($method ? shift : $global)->_publish(1, @_);
+}
+
+sub run {
+    my ($self, @subscribe_args) = @_;
+
+    $self->subscribe(@subscribe_args) if @subscribe_args;
+
+    $self->tick( time() - $self->{ last_send } + $KEEPALIVE_INTERVAL )
+        until $self->{stop_loop};
+
+    delete $self->{stop_loop};
+}
+
+sub subscribe {
+    my ($self, @kv) = @_;
+
+    while (my ($topic, $callback) = splice @kv, 0, 2) {
+        $self->{sub}->{ $topic } = 1;
+        push @{ $self->{callbacks} }, {
+            regex => _filter_as_regex($topic),
+            callback => $callback,
+        };
+    }
+
+    $self->_send_subscribe() if $self->{socket};
+}
+
+sub tick {
+    my ($self, $timeout) = @_;
+
+    $self->_connect;
+    my $socket = $self->{socket};
+
+    $self->{select} ||= IO::Select->new($socket);
+    my $select = $self->{select};
+
+    my $bufref = \$self->{buffer};
+
+    if ($select->can_read( $timeout // 0 )) {
+        sysread $socket, $$bufref, 8192, length $$bufref
+            or delete $self->{socket};
+
+        while (length $$bufref) {
+            my $packet = $self->_parse() or last;
+            $self->_incoming_publish($packet) if $packet->{type} == 3;
+        }
+    }
+
+    if ($self->{last_send} <= time() + $KEEPALIVE_INTERVAL) {
+        $self->_send("\xc0\0");  # PINGREQ
+    }
 }
 
 1;
