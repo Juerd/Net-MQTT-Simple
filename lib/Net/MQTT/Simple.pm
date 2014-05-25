@@ -5,7 +5,9 @@ package Net::MQTT::Simple;
 
 our $VERSION = '1.01';
 
-my $KEEPALIVE_INTERVAL = 10;
+# Please note that these are not documented and are subject to change:
+our $KEEPALIVE_INTERVAL = 10;
+our $MAX_LENGTH = 2097152;  # 2 MB
 
 my $global;
 my $socket_class =
@@ -138,16 +140,15 @@ sub _parse {
         $v;
     };
 
-    return if $length > (length $$bufref) + $offset;  # not enough data yet
-
-    if ($length > 2e6) {
+    if ($length > $MAX_LENGTH) {
         # On receiving an enormous packet, just disconnect to avoid exhausting
         # RAM on tiny systems.
         # TODO: just slurp and drop the data
-        # TODO: configurable maximum
         delete $self->{socket};
         return;
     }
+
+    return if $length > (length $$bufref) + $offset;  # not enough data yet
 
     my $first_byte = unpack "C", substr $$bufref, 0, 1;
 
