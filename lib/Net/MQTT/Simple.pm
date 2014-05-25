@@ -1,7 +1,5 @@
 package Net::MQTT::Simple;
 
-use IO::Select;
-
 # use strict;    # might not be available (e.g. on openwrt)
 # use warnings;  # same.
 
@@ -65,8 +63,6 @@ sub _connect {
     my ($self) = @_;
 
     return if $self->{socket} and $self->{socket}->connected;
-
-    delete $self->{select};
 
     $self->{socket} = $socket_class->new( PeerAddr => $self->{server} );
     $self->_send(
@@ -244,12 +240,12 @@ sub tick {
     $self->_connect;
     my $socket = $self->{socket};
 
-    $self->{select} ||= IO::Select->new($socket);
-    my $select = $self->{select};
-
     my $bufref = \$self->{buffer};
 
-    if ($select->can_read( $timeout // 0 )) {
+    my $r = '';
+    vec($r, fileno($socket), 1) = 1;
+
+    if (select $r, undef, undef, $timeout // 0) {
         sysread $socket, $$bufref, 8192, length $$bufref
             or delete $self->{socket};
 
