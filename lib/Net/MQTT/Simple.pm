@@ -172,6 +172,9 @@ sub _incoming_publish {
     # have been 16 bits between $topic and $message.
     my ($topic, $message) = unpack "n/a a*", $packet->{data};
 
+    utf8::decode($topic);
+    utf8::decode($message);
+
     for my $cb (@{ $self->{callbacks} }) {
         if ($topic =~ /$cb->{regex}/) {
             $cb->{callback}->($topic, $message);
@@ -297,16 +300,17 @@ Net::MQTT::Simple - Minimal MQTT version 3 interface
     $mqtt->retain( "topic/here" => "Message here");
 
     sub callback {
-        my ($topic, $message) = @_;
-        print "[$topic] $message\n";
-    }
 
     $mqtt->run(
         "sensors/+/temperature" => sub {
             my ($topic, $message) = @_;
-            die "The building's on fire" if $message > 50;
+            die "The building's on fire" if $message > 150;
         },
-        "#" => \&callback,  # matter of style: inline subs or \& references
+        "#" => sub {
+            my ($topic, $message) = @_;
+            print "[$topic] $message\n";
+        },
+    }
     );
 
 
@@ -445,11 +449,24 @@ Most clients do not adhere to this part of the specifications.
 
 =head1 CAVEATS
 
+=head2 Automatic reconnection
+
 Connection and reconnection are handled automatically, but without retries. If
 anything goes wrong, this will cause a single reconnection attempt before the
 following action. For example, if sending a message fails because of a
 disconnected socket, the message will not be resent, but the next message might
 succeed. This behaviour is intended.
+
+=head2 Unicode
+
+This module uses the proper Perl Unicode abstractions, which mean that
+arguments for I<topic> and I<message> are Unicode text strings, not UTF-8
+encoded binary data. Encoding and decoding is handled transparently within this
+module.
+
+For you, this means that if you use any literal UTF-8 in your code, you need to
+C<use utf8;>, and that if you read or write data on filehandles, you must inform
+Perl about this fact first (e.g. with C<binmode STDOUT, ":encoding(utf8)";>.
 
 =head1 LICENSE
 
