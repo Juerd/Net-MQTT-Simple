@@ -1,5 +1,10 @@
 NAME
-    Net::MQTT::Simple - Minimal MQTT version 3 publisher
+    Net::MQTT::Simple - Minimal MQTT version 3 interface
+
+DOCUMENTATION
+    https://metacpan.org/pod/mqtt-simple
+    https://metacpan.org/pod/Net::MQTT::Simple
+    https://metacpan.org/pod/Net::MQTT::Simple::SSL
 
 INSTALLATION
     To install this module type the following:
@@ -23,3 +28,4 @@ MANUAL INSTALLATION
     "perl -V". This list includes the current working directory (".").
     Additional include paths can be specified in the "PERL5LIB" environment
     variable; see perlenv.
+
