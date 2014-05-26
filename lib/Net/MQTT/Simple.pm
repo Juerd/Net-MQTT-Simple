@@ -3,7 +3,7 @@ package Net::MQTT::Simple;
 # use strict;    # might not be available (e.g. on openwrt)
 # use warnings;  # same.
 
-our $VERSION = '1.11';
+our $VERSION = '1.12';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 10;

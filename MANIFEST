@@ -1,5 +1,7 @@
 lib/Net/MQTT/Simple.pm
+bin/mqtt-simple
 t/use.t
+t/regex.t
 Makefile.PL
 README
 Changes
