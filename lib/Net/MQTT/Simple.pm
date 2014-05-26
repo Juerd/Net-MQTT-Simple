@@ -28,7 +28,7 @@ sub _croak {
     die sprintf "%s at %s line %d.\n", "@_", (caller 1)[1, 2];
 }
 
-sub _filter_as_regex {
+sub filter_as_regex {
     my ($filter) = @_;
 
     return "^(?!\\\$)" if $filter eq '#';   # Match everything except /^\$/
@@ -263,7 +263,7 @@ sub subscribe {
     while (my ($topic, $callback) = splice @kv, 0, 2) {
         $self->{sub}->{ $topic } = 1;
         push @{ $self->{callbacks} }, {
-            regex => _filter_as_regex($topic),
+            regex => filter_as_regex($topic),
             callback => $callback,
         };
     }
@@ -424,6 +424,12 @@ If C<tick> returns false, this means the socket was no longer connected.
 However, a true value does not necessarily mean that the socket is still
 functional. The only way to reliably determine that a TCP stream is
 still connected, is to write data, which is only done periodically.
+
+=head1 UTILITY FUNCTIONS
+
+=head2 Net::MQTT::Simple::filter_as_regex(topic_filter)
+
+Given a valid MQTT topic filter, returns the corresponding regular expression.
 
 =head1 IPv6 PREREQUISITE
 

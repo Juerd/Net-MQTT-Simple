@@ -3,7 +3,7 @@ use strict;
 use Test::More;
 use Net::MQTT::Simple;
 
-*far = \&Net::MQTT::Simple::_filter_as_regex;
+*far = \&Net::MQTT::Simple::filter_as_regex;
 
 no warnings "qw";
 
@@ -101,12 +101,12 @@ for (@matrix) {
 
     for my $filter (@should_match) {
         delete $should_not_match{ $filter };
-        my $regex = Net::MQTT::Simple::_filter_as_regex( $filter );
+        my $regex = far( $filter );
         like($topic, qr/$regex/, "'$topic' should match '$filter'");
     }
 
     for my $filter (sort keys %should_not_match) {
-        my $regex = Net::MQTT::Simple::_filter_as_regex( $filter );
+        my $regex = far( $filter );
         unlike($topic, qr/$regex/, "'$topic' should not match '$filter'");
     }
 }
