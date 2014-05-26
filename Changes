@@ -3,6 +3,11 @@ Revision history for Perl extension DBIx::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
+1.10  Mon May 26 02:11 2014
+	- New: Support for MQTT subscriptions, with per-subscription handlers
+	- New: Command line utility "mqtt-simple"
+	- Improvement: Force reconnection after failed write to socket
+
 1.01  Wed Apr 23 15:38 2014
         - Bug fix: $\ is now ignored (e.g. under perl -l)
 
