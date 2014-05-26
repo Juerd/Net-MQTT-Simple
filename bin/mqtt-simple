@@ -106,8 +106,8 @@ mqtt-simple - Very simple MQTT implementation
 =head1 DESCRIPTION
 
 This is just a simple utility program. It doesn't do much. Specifically, all
-the QoS and security features are unsupported. Also, don't expect fancy error
-messages and such :-)
+the QoS and username/password features are unsupported. Also, don't expect
+fancy error messages and such :-)
 
 =head1 COMMAND LINE OPTIONS
 
