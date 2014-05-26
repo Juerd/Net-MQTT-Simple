@@ -3,11 +3,12 @@ Revision history for Perl extension Net::MQTT::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
-1.12  Mon May 26 15:42 2014
+1.12  Mon May 26 16:24 2014
 	- Bug fix: update MANIFEST to include some new files
 	  (Reported by foobar in #revspace)
 	- Bug fix: this file (Changes) mentioned the wrong distribution name
 	  (Reported by foobar in #revspace)
+	- Improvement: Only try one reconnect per 5 seconds
 
 1.11  Mon May 26 03:37 2014
 	- Bug fix: calculations for next ping were bad, resulting in ping flood

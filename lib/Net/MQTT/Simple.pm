@@ -7,6 +7,7 @@ our $VERSION = '1.12';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 10;
+our $RECONNECT_INTERVAL = 5;
 our $MAX_LENGTH = 2097152;  # 2 MB
 
 my $global;
@@ -58,13 +59,20 @@ sub new {
     # Add port for bare IPv4 address or bracketed IPv6 address
     $server .= ":1883" if $server !~ /:/ or $server =~ /^\[.*\]$/;
 
-    return bless { server => $server, buffer => "" }, $class;
+    return bless { server => $server, buffer => "", last_connect => 0 }, $class;
 }
 
 sub _connect {
     my ($self) = @_;
 
     return if $self->{socket} and $self->{socket}->connected;
+
+    if ($self->{last_connect} > time() - $RECONNECT_INTERVAL) {
+        select undef, undef, undef, .01;
+        return;
+    }
+
+    $self->{last_connect} = time;
 
     $self->{socket} = $socket_class->new( PeerAddr => $self->{server} )
         or warn "$0: connect: $@\n";
@@ -466,7 +474,8 @@ Connection and reconnection are handled automatically, but without retries. If
 anything goes wrong, this will cause a single reconnection attempt before the
 following action. For example, if sending a message fails because of a
 disconnected socket, the message will not be resent, but the next message might
-succeed. This behaviour is intended.
+succeed. Only one new connection attempt is done per approximately 5 seconds.
+This behaviour is intended.
 
 =head2 Unicode
 
