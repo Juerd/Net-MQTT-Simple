@@ -16,11 +16,30 @@ GetOptions(
     "p|publish=s"       => \my $publish,
     "r|retain"          => \my $retain,
     "m|message=s"       => \my $message,
+    "ssl"               => \my $ssl,
+    "insecure"          => \my $insecure,
+    "ca=s"              => \my $ca,
+    "cert=s"            => \my $cert,
+    "key=s"             => \my $key,
 ) or die $usage;
 
 $host or die $usage;
 
-my $m = Net::MQTT::Simple->new($host);
+die "--ca, --cert, --key and --insecure require --ssl\n"
+    if ($ca or $cert or $key or $insecure) and not $ssl;
+
+die "--key requires --cert\n" if $key and not $cert;
+die "--cert requires --key\n" if $cert and not $key;
+
+require Net::MQTT::Simple::SSL if $ssl;
+my $class = $ssl ? "Net::MQTT::Simple::SSL" : "Net::MQTT::Simple";
+
+$ENV{MQTT_SIMPLE_SSL_CA}   = $ca   if $ca;
+$ENV{MQTT_SIMPLE_SSL_CERT} = $cert if $cert;
+$ENV{MQTT_SIMPLE_SSL_KEY}  = $key  if $key;
+$ENV{MQTT_SIMPLE_SSL_INSECURE} = 1 if $insecure;
+
+my $m = $class->new($host);
 
 defined $publish or @topics or die $usage;
 
@@ -76,6 +95,10 @@ mqtt-simple - Very simple MQTT implementation
 
  tail -f logfile | mqtt-simple -h mqtt.example.org -p "log/example"
 
+ mqtt-simple --ssl --insecure ...
+
+ mqtt-simple --ssl --ca ca.crt --cert client.crt --key client.key
+
 =head1 DESCRIPTION
 
 This is just a simple utility program. It doesn't do much. Specifically, all
@@ -106,13 +129,48 @@ Causes messages published with C<-p> to have the "retain" flag on.
 =item -s --subscribe I<filter>
 
 Subscribe to the given topic filter. Use the standard MQTT wildcards like
-C<+> and C<#>. Outputs matching published messages on B<stdout>.
+C<+> and C<#>. Outputs matching published messages on B<stdout>. Can be given
+multiple times.
 
 =item -c --color
 
 For each given C<-s>, print the matching topic in a different color. Note that
-the first matching topic will be used for color selection, so specify the topics
-with the most specific one first, the least specific one (like C<#>) last.
+the first matching topic will be used for color selection, so specify the
+topics with the most specific one first, the least specific one (like C<#>)
+last.
+
+=back
+
+=head2 SSL options
+
+=over 25
+
+=item --ssl
+
+Use SSL instead of unencrypted connection.
+
+=item --insecure
+
+Disable SSL certificate validation. Useful for testing, bad idea in production.
+
+Overrides the environment variable C<MQTT_SIMPLE_SSL_INSECURE>.
+
+=item --ca I<path>
+
+The Certificate Authority to validate against. I<path> can be a file
+or a directory. If unspecified, IO::Socket::SSL attempts to use the system
+wide CA configuration.
+
+Overrides the environment variable C<MQTT_SIMPLE_SSL_CA>.
+
+=item --cert I<path>
+
+=item --key I<path>
+
+A client certificate with its key.
+
+Override the environment variables C<MQTT_SIMPLE_SSL_CERT> and
+C<MQTT_SIMPLE_SSL_KEY>.
 
 =back
 

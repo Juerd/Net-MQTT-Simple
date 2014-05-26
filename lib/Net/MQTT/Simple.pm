@@ -3,18 +3,25 @@ package Net::MQTT::Simple;
 # use strict;    # might not be available (e.g. on openwrt)
 # use warnings;  # same.
 
-our $VERSION = '1.12';
+our $VERSION = '1.12_01';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 10;
 our $RECONNECT_INTERVAL = 5;
-our $MAX_LENGTH = 2097152;  # 2 MB
+our $MAX_LENGTH = 2097152;    # 2 MB
+our $READ_BYTES = 16 * 1024;  # 16 kB per IO::Socket::SSL recommendation
 
 my $global;
-my $socket_class =
-      eval { require IO::Socket::IP; 1 }   ? "IO::Socket::IP"
-    : eval { require IO::Socket::INET; 1 } ? "IO::Socket::INET"
+
+BEGIN {
+    *_socket_class =
+      eval { require IO::Socket::IP; 1 }   ? sub { "IO::Socket::IP" }
+    : eval { require IO::Socket::INET; 1 } ? sub { "IO::Socket::INET" }
     : die "Neither IO::Socket::IP nor IO::Socket::INET found";
+}
+
+sub _default_port { 1883 }
+sub _socket_error { "$@" }
 
 # Carp might not be available either.
 sub _croak {
@@ -50,16 +57,22 @@ sub import {
 }
 
 sub new {
-    my ($class, $server) = @_;
-    @_ == 2 or _croak "Wrong number of arguments for $class->new";
+    my ($class, $server, $sockopts) = @_;
+    @_ == 2 or @_ == 3 or _croak "Wrong number of arguments for $class->new";
+    my $port = $class->_default_port;
 
     # Add port for bare IPv6 address
-    $server = "[$server]:1883" if $server =~ /:.*:/ and not $server =~ /\[/;
+    $server = "[$server]:$port" if $server =~ /:.*:/ and not $server =~ /\[/;
 
     # Add port for bare IPv4 address or bracketed IPv6 address
-    $server .= ":1883" if $server !~ /:/ or $server =~ /^\[.*\]$/;
+    $server .= ":$port" if $server !~ /:/ or $server =~ /^\[.*\]$/;
 
-    return bless { server => $server, buffer => "", last_connect => 0 }, $class;
+    return bless {
+        server       => $server,
+        buffer       => "",
+        last_connect => 0,
+        sockopts     => $sockopts // {},
+    }, $class;
 }
 
 sub _connect {
@@ -71,14 +84,17 @@ sub _connect {
         select undef, undef, undef, .01;
         return;
     }
-
     $self->{last_connect} = time;
 
-    $self->{socket} = $socket_class->new( PeerAddr => $self->{server} )
-        or warn "$0: connect: $@\n";
+    my $socket_class = $self->_socket_class;
+    my %socket_options = (
+        PeerAddr => $self->{server},
+        %{ $self->{sockopts} }
+    );
+    $self->{socket} = $socket_class->new( %socket_options )
+        or warn "$0: connect: " . $self->_socket_error . "\n";
 
     local $self->{skip_connect} = 1;  # avoid infinite recursion :-)
-
     $self->_send(
         "\x10" . pack("C/a*",
             "\0\x06MQIsdp\x03\x02\0\x3c" . pack("n/a*",
@@ -86,7 +102,6 @@ sub _connect {
             )
         )
     );
-
     $self->_send_subscribe;
 }
 
@@ -213,14 +228,14 @@ sub _publish {
 }
 
 sub publish {
-    my $method = ref($_[0]) eq __PACKAGE__;
+    my $method = UNIVERSAL::isa($_[0], __PACKAGE__);
     @_ == ($method ? 3 : 2) or _croak "Wrong number of arguments for publish";
 
     ($method ? shift : $global)->_publish(0, @_);
 }
 
 sub retain {
-    my $method = ref($_[0]) eq __PACKAGE__;
+    my $method = UNIVERSAL::isa($_[0], __PACKAGE__);
     @_ == ($method ? 3 : 2) or _croak "Wrong number of arguments for retain";
 
     ($method ? shift : $global)->_publish(1, @_);
@@ -269,7 +284,7 @@ sub tick {
     vec($r, fileno($socket), 1) = 1;
 
     if (select $r, undef, undef, $timeout // 0) {
-        sysread $socket, $$bufref, 8192, length $$bufref
+        sysread $socket, $$bufref, $READ_BYTES, length $$bufref
             or delete $self->{socket};
 
         while (length $$bufref) {
@@ -318,8 +333,6 @@ Net::MQTT::Simple - Minimal MQTT version 3 interface
     $mqtt->publish("topic/here" => "Message here");
     $mqtt->retain( "topic/here" => "Message here");
 
-    sub callback {
-
     $mqtt->run(
         "sensors/+/temperature" => sub {
             my ($topic, $message) = @_;
@@ -330,8 +343,6 @@ Net::MQTT::Simple - Minimal MQTT version 3 interface
             print "[$topic] $message\n";
         },
     }
-    );
-
 
 =head1 DESCRIPTION
 
@@ -339,14 +350,17 @@ This module consists of only one file and has no dependencies except core Perl
 modules, making it suitable for embedded installations where CPAN installers
 are unavailable and resources are limited.
 
-Only the most basic MQTT publishing functionality is supported; if you need
-more, you'll have to use the full-featured L<Net::MQTT> instead.
+Only basic MQTT functionality is provided; if you need more, you'll have to
+use the full-featured L<Net::MQTT> instead.
 
 Connections are set up on demand, automatically reconnecting to the server if a
 previous connection had been lost.
 
 Because sensor scripts often run unattended, connection failures will result in
 warnings (on STDERR if you didn't override that) without throwing an exception.
+
+Please refer to L<Net::MQTT::Simple::SSL> for more information about encrypted
+and authenticated connections.
 
 =head2 Functional interface
 
@@ -360,9 +374,14 @@ colon. The functions C<publish> and C<retain> will be exported.
 
 =head2 Object oriented interface
 
+=head3 new(server[, sockopts])
+
 Specify the server (possibly with a colon and port number) to the constructor,
 C<< Net::MQTT::Simple->new >>. The socket is disconnected when the object goes
 out of scope.
+
+Optionally, a reference to a hash of socket options can be passed. Options
+specified in this hash are passed on to the socket constructor.
 
 =head1 PUBLISHING MESSAGES
 
@@ -439,10 +458,9 @@ as "fire and forget".
 Since QoS is not supported, no retransmissions are done, and no message will
 indicate that it has already been sent before.
 
-=item Authentication, encryption
+=item Authentication
 
-No username and password are sent to the server and the connection will be set
-up without TLS or SSL.
+No username and password are sent to the server.
 
 =item Last will
 
@@ -500,4 +518,4 @@ Juerd Waalboer <juerd@tnx.nl>
 
 =head1 SEE ALSO
 
-L<Net::MQTT>
+L<Net::MQTT>, L<Net::MQTT::Simple::SSL>

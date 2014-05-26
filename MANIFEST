@@ -1,4 +1,5 @@
 lib/Net/MQTT/Simple.pm
+lib/Net/MQTT/Simple/SSL.pm
 bin/mqtt-simple
 t/use.t
 t/regex.t
