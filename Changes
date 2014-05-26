@@ -3,6 +3,12 @@ Revision history for Perl extension DBIx::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
+1.11  Mon May 26 03:37 2014
+	- Bug fix: calculations for next ping were bad, resulting in ping flood
+	- Bug fix: avoid some Perl warnings under perl -w
+	- Improvement: Emit warnings on stderr if connection failed
+	- Improvement: Prevent possible infinite recursion
+
 1.10  Mon May 26 02:11 2014
 	- New: Support for MQTT subscriptions, with per-subscription handlers
 	- New: Command line utility "mqtt-simple"

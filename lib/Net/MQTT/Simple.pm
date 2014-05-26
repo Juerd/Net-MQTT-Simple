@@ -3,7 +3,7 @@ package Net::MQTT::Simple;
 # use strict;    # might not be available (e.g. on openwrt)
 # use warnings;  # same.
 
-our $VERSION = '1.10';
+our $VERSION = '1.11';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 10;
@@ -58,7 +58,7 @@ sub new {
     # Add port for bare IPv4 address or bracketed IPv6 address
     $server .= ":1883" if $server !~ /:/ or $server =~ /^\[.*\]$/;
 
-    return bless { server => $server }, $class;
+    return bless { server => $server, buffer => "" }, $class;
 }
 
 sub _connect {
@@ -66,7 +66,11 @@ sub _connect {
 
     return if $self->{socket} and $self->{socket}->connected;
 
-    $self->{socket} = $socket_class->new( PeerAddr => $self->{server} );
+    $self->{socket} = $socket_class->new( PeerAddr => $self->{server} )
+        or warn "$0: connect: $@\n";
+
+    local $self->{skip_connect} = 1;  # avoid infinite recursion :-)
+
     $self->_send(
         "\x10" . pack("C/a*",
             "\0\x06MQIsdp\x03\x02\0\x3c" . pack("n/a*",
@@ -96,8 +100,9 @@ sub _prepend_variable_length {
 sub _send {
     my ($self, $data) = @_;
 
-    $self->_connect;
-    my $socket = $self->{socket};
+    $self->_connect unless exists $self->{skip_connect};
+    my $socket = $self->{socket} or return;
+
     syswrite $socket, $data
         or delete $self->{socket};  # reconnect on next message
 
@@ -218,8 +223,13 @@ sub run {
 
     $self->subscribe(@subscribe_args) if @subscribe_args;
 
-    $self->tick( time() - $self->{ last_send } + $KEEPALIVE_INTERVAL )
-        until $self->{stop_loop};
+    until ($self->{stop_loop}) {
+        my $timeout = exists $self->{last_send}
+            ? $KEEPALIVE_INTERVAL - (time() - $self->{last_send})
+            : 1;
+
+        $self->tick($timeout);
+    }
 
     delete $self->{stop_loop};
 }
@@ -242,7 +252,8 @@ sub tick {
     my ($self, $timeout) = @_;
 
     $self->_connect;
-    my $socket = $self->{socket};
+
+    my $socket = $self->{socket} or return;
 
     my $bufref = \$self->{buffer};
 
@@ -259,7 +270,7 @@ sub tick {
         }
     }
 
-    if ($self->{last_send} <= time() + $KEEPALIVE_INTERVAL) {
+    if (time() >= $self->{last_send} + $KEEPALIVE_INTERVAL) {
         $self->_send("\xc0\0");  # PINGREQ
     }
 
