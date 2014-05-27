@@ -29,7 +29,7 @@ sub new {
         $sockopts->{SSL_cert_file} //= $cert;
     }
     if (my $key = $ENV{MQTT_SIMPLE_SSL_KEY}) {
-        $sockopts->{SSL_key_file} //= $cert;
+        $sockopts->{SSL_key_file} //= $key;
     }
     ## Fingerprint support in IO::Socket::SSL appears to be broken, even in
     ## 1.988: during validation, X509_digest returns a different hash than
