@@ -117,4 +117,40 @@ for (@matrix) {
     }
 }
 
+# These are from mosquitto's 03-pattern-matching.py
+my @mosquitto_tests = split "\n", <<'END';
+pattern_test("#", "test/topic")
+pattern_test("#", "/test/topic")
+pattern_test("foo/#", "foo/bar/baz")
+pattern_test("foo/+/baz", "foo/bar/baz")
+pattern_test("foo/+/baz/#", "foo/bar/baz")
+pattern_test("foo/+/baz/#", "foo/bar/baz/bar")
+pattern_test("foo/foo/baz/#", "foo/foo/baz/bar")
+pattern_test("foo/#", "foo")
+pattern_test("/#", "/foo")
+pattern_test("test/topic/", "test/topic/")
+pattern_test("test/topic/+", "test/topic/")
+pattern_test("+/+/+/+/+/+/+/+/+/+/test", "one/two/three/four/five/six/seven/eight/nine/ten/test")
+
+pattern_test("#", "test////a//topic")
+pattern_test("#", "/test////a//topic")
+pattern_test("foo/#", "foo//bar///baz")
+pattern_test("foo/+/baz", "foo//baz")
+pattern_test("foo/+/baz//", "foo//baz//")
+pattern_test("foo/+/baz/#", "foo//baz")
+pattern_test("foo/+/baz/#", "foo//baz/bar")
+pattern_test("foo//baz/#", "foo//baz/bar")
+pattern_test("foo/foo/baz/#", "foo/foo/baz/bar")
+pattern_test("/#", "////foo///bar")
+END
+
+sub pattern_test {
+    my ($pattern, $match) = @_;
+    my $regex = far($pattern);
+    like($match, qr/$regex/, "mosquitto: '$match' should match '$pattern'");
+}
+
+eval for @mosquitto_tests;
+
+
 done_testing;

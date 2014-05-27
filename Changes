@@ -3,6 +3,10 @@ Revision history for Perl extension Net::MQTT::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
+1.15    
+        - Improvement: pattern tests now includes those from mosquitto.
+          (Suggested by karlp in #mqtt)
+
 1.14  Tue May 27 13:09 2014
     !!  - Bug fix: Unlike topics, message payloads are binary data, not text
           strings. This module no longer encodes or decodes them as UTF-8.
