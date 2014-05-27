@@ -3,6 +3,15 @@ Revision history for Perl extension Net::MQTT::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
+1.13  Tue May 27 02:39 2014
+	- New: SSL support
+	- New: --except option for mqtt-simple command line utility
+	- New: --raw option for mqtt-simple command line utility
+	- New: --no-color option for mqtt-simple command line utility
+	- Improvement: mqtt-simple enables color by default, for terminals
+	- Improvement: mqtt-simple filters ASCII control codes
+	- Improvement: filter_as_regex is exposed and documented
+
 1.12  Mon May 26 16:24 2014
 	- Bug fix: update MANIFEST to include some new files
 	  (Reported by foobar in #revspace)
