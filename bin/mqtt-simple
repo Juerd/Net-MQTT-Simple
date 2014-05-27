@@ -88,8 +88,6 @@ if (@topics) {
             });
     }
     $m->run;
-} elsif ($color) {
-    die "-c requires -s. $usage";
 }
 
 __END__
