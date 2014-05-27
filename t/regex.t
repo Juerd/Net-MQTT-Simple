@@ -78,15 +78,21 @@ my @matrix = (
     # Topic             Should match all of these, but none of the
     #                   other ones that are listed for other topics.
     [ "foo",            qw(# /# +   foo/# foo) ],
-    [ "foo/bar",        qw(# /# +/+ foo/# foo/bar/# foo/+ +/bar) ],
+    [ "foo/bar",        qw(# /# +/+ foo/# foo/bar/# foo/+ +/bar foo/+/#) ],
+    [ "foo//bar",       qw(# /# +/+/+ foo/# foo//bar foo/+/bar foo/+/#
+                           foo//+) ],
     [ "/foo",           qw(# /# +/+ /foo /foo/#) ],
     [ "/\$foo",         qw(# /# +/+ /$foo /$foo/#) ],  # Not special
+    [ "/foo/bar",       qw(# /# +/+/+ /foo/#)],
     [ "///",            qw(# /# +/+/+/+) ],
-    [ "foo/bar/baz",    qw(# /# +/+/+ foo/# foo/bar/#
+    [ "foo/bar/baz",    qw(# /# +/+/+ foo/# foo/bar/# foo/+/#
                            +/bar/baz foo/+/baz foo/bar/+ +/+/baz) ],
     [ "\$foo",          qw($foo $foo/#) ],  # Special because it begins with $
     [ "\$SYS/foo",      qw($SYS/# $SYS/+ $SYS/foo) ],
     [ "\$SYS/foo/bar",  qw($SYS/# $SYS/+/+ $SYS/foo/bar $SYS/+/bar $SYS/foo/+)],
+    [ "fo2/bar/baz",    qw(# /# fo2/bar/baz +/+/+ +/+/baz +/bar/baz) ],
+    [ "foo///baz",      qw(# /# foo/# foo/+/# foo/+/+/baz +/+/+/+) ],
+    [ "foo/bar/",       qw(# /# foo/# foo/+/# foo/bar/+ foo/bar/# +/+/+)],
 );
 
 my %all_filters;
