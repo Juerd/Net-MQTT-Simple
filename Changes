@@ -3,32 +3,38 @@ Revision history for Perl extension Net::MQTT::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
+1.14  Tue May 27 13:09 2014
+    !!  - Bug fix: Unlike topics, message payloads are binary data, not text
+          strings. This module no longer encodes or decodes them as UTF-8.
+          A warning will be emitted if you try to publish data that is not
+          binary compatbile. This change has no impact on 7 bit ASCII data.
+
 1.13  Tue May 27 02:39 2014
-	- New: SSL support
-	- New: --except option for mqtt-simple command line utility
-	- New: --raw option for mqtt-simple command line utility
-	- New: --no-color option for mqtt-simple command line utility
-	- Improvement: mqtt-simple enables color by default, for terminals
-	- Improvement: mqtt-simple filters ASCII control codes
-	- Improvement: filter_as_regex is exposed and documented
+        - New: SSL support
+        - New: --except option for mqtt-simple command line utility
+        - New: --raw option for mqtt-simple command line utility
+        - New: --no-color option for mqtt-simple command line utility
+        - Improvement: mqtt-simple enables color by default, for terminals
+        - Improvement: mqtt-simple filters ASCII control codes
+        - Improvement: filter_as_regex is exposed and documented
 
 1.12  Mon May 26 16:24 2014
-	- Bug fix: update MANIFEST to include some new files
-	  (Reported by foobar in #revspace)
-	- Bug fix: this file (Changes) mentioned the wrong distribution name
-	  (Reported by foobar in #revspace)
-	- Improvement: Only try one reconnect per 5 seconds
+        - Bug fix: update MANIFEST to include some new files
+          (Reported by foobar in #revspace)
+        - Bug fix: this file (Changes) mentioned the wrong distribution name
+          (Reported by foobar in #revspace)
+        - Improvement: Only try one reconnect per 5 seconds
 
 1.11  Mon May 26 03:37 2014
-	- Bug fix: calculations for next ping were bad, resulting in ping flood
-	- Bug fix: avoid some Perl warnings under perl -w
-	- Improvement: Emit warnings on stderr if connection failed
-	- Improvement: Prevent possible infinite recursion
+        - Bug fix: calculations for next ping were bad, resulting in ping flood
+        - Bug fix: avoid some Perl warnings under perl -w
+        - Improvement: Emit warnings on stderr if connection failed
+        - Improvement: Prevent possible infinite recursion
 
 1.10  Mon May 26 02:11 2014
-	- New: Support for MQTT subscriptions, with per-subscription handlers
-	- New: Command line utility "mqtt-simple"
-	- Improvement: Force reconnection after failed write to socket
+        - New: Support for MQTT subscriptions, with per-subscription handlers
+        - New: Command line utility "mqtt-simple"
+        - Improvement: Force reconnection after failed write to socket
 
 1.01  Wed Apr 23 15:38 2014
         - Bug fix: $\ is now ignored (e.g. under perl -l)

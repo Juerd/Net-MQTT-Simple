@@ -1,7 +1,6 @@
 #!/usr/bin/perl -w
 
 use strict;
-use open qw(:std :encoding(utf8));
 use Net::MQTT::Simple;
 use Getopt::Long qw(GetOptions);
 
@@ -78,6 +77,8 @@ if (@topics) {
             $_ => sub {
                 my ($topic, $message) = @_;
                 $topic =~ /$_/ and return for @exceptions;
+                utf8::encode($topic);
+                # $message is binary data so our output can have mixed encodings.
 
                 unless ($raw) {
                     s/([\0-\x1F])/$iv . chr(64 + ord $1) . $pv/ge

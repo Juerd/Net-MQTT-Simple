@@ -3,7 +3,7 @@ package Net::MQTT::Simple;
 # use strict;    # might not be available (e.g. on openwrt)
 # use warnings;  # same.
 
-our $VERSION = '1.13';
+our $VERSION = '1.14';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 10;
@@ -201,7 +201,6 @@ sub _incoming_publish {
     my ($topic, $message) = unpack "n/a a*", $packet->{data};
 
     utf8::decode($topic);
-    utf8::decode($message);
 
     for my $cb (@{ $self->{callbacks} }) {
         if ($topic =~ /$cb->{regex}/) {
@@ -217,7 +216,11 @@ sub _publish {
     $message //= "" if $retain;
 
     utf8::encode($topic);
-    utf8::encode($message);
+    utf8::downgrade($message, 1) or do {
+        my ($file, $line, $method) = (caller 1)[1, 2, 3];
+        warn "Wide character in $method at $file line $line.\n";
+        utf8::encode($message);
+    };
 
     $self->_send(
         ($retain ? "\x31" : "\x30")
@@ -503,14 +506,25 @@ This behaviour is intended.
 
 =head2 Unicode
 
-This module uses the proper Perl Unicode abstractions, which mean that
-arguments for I<topic> and I<message> are Unicode text strings, not UTF-8
-encoded binary data. Encoding and decoding is handled transparently within this
-module.
+This module uses the proper Perl Unicode abstractions for parts that according
+to the MQTT specification are UTF-8 encoded. This includes I<topic>s, but not
+I<message>s. Published messages are binary data, which you may have to encode
+and decode yourself.
 
-For you, this means that if you use any literal UTF-8 in your code, you need to
-C<use utf8;>, and that if you read or write data on filehandles, you must inform
-Perl about this fact first (e.g. with C<binmode STDOUT, ":encoding(utf8)";>.
+This means that if you have UTF-8 encoded string literals in your code, you
+should C<use utf8;> and that any of those strings which is a I<message> will
+need to be encoded by you, for example with C<utf8::encode($message);>.
+
+It also means that a I<message> should never contain any character with an
+ordinal value of greater than 255, because those cannot be used in binary
+communication. If you're passing non-ASCII text strings, encode them before
+publishing, decode them after receiving. A character greater than 255 results in
+a warning
+
+    Wide character in publish at yourfile.pl line 42.
+
+while the UTF-8 encoded data is passed through. To get rid of the warning, use
+C<utf8::encode($message);>.
 
 =head1 LICENSE
 
