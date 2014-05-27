@@ -11,7 +11,8 @@ my @colors = qw(33;1 32;1 31;1 35;1 36;1 37;1 33 32 31 35 36);
 
 GetOptions(
     "h|host=s"          => \my $host,
-    "c|color"           => \my $color,
+    "c|color!"          => \(my $color = -t STDOUT),
+    "raw"               => \my $raw,
     "s|t|subscribe=s"   => \my @topics,
     "p|publish=s"       => \my $publish,
     "r|retain"          => \my $retain,
@@ -62,19 +63,27 @@ if (defined $publish) {
 
 $_ = Net::MQTT::Simple::filter_as_regex($_) for @exceptions;
 
+
 if (@topics) {
     my $i = 0;
+    my $ansi_reset = $color ? "\e[0m" : "";
+    my $iv = $color ? "\e[7m" : "^";  # inverse video or caret
+    my $pv = $color ? "\e[27m" : "";
+
     for (@topics) {
-        my $ansi = $color
-            ? "\e[$colors[ $i % @colors ]m"
-            : "";
-        my $ansi_reset = $color ? "\e[0m" : "";
+        my $ansi = $color ? "\e[$colors[ $i % @colors ]m" : "";
         $i++;
 
         $m->subscribe(
             $_ => sub {
                 my ($topic, $message) = @_;
                 $topic =~ /$_/ and return for @exceptions;
+
+                unless ($raw) {
+                    s/([\0-\x1F])/$iv . chr(64 + ord $1) . $pv/ge
+                        for $topic, $message;
+                }
+
                 print "$ansi$topic$ansi_reset $message\n";
             });
     }
@@ -140,12 +149,22 @@ multiple times.
 
 Suppress published messages that match I<filter>. Can be given multiple times.
 
-=item -c --color
+=item --color
+
+=item --no-color
 
 For each given C<-s>, print the matching topic in a different color. Note that
 the first matching topic will be used for color selection, so specify the
 topics with the most specific one first, the least specific one (like C<#>)
 last.
+
+Color is enabled by default if I<stdout> is a terminal.
+
+=item --raw
+
+Pass ASCII control characters unaltered. By default, they're replaced by C<^@>
+notation or, when C<--color> is enabled, reverse video characters. For example,
+an ASCII newline would be displayed as C<^J> unless C<--raw> is used.
 
 =back
 
