@@ -6,7 +6,7 @@ package Net::MQTT::Simple;
 our $VERSION = '1.15';
 
 # Please note that these are not documented and are subject to change:
-our $KEEPALIVE_INTERVAL = 10;
+our $KEEPALIVE_INTERVAL = 60;
 our $RECONNECT_INTERVAL = 5;
 our $MAX_LENGTH = 2097152;    # 2 MB
 our $READ_BYTES = 16 * 1024;  # 16 kB per IO::Socket::SSL recommendation
@@ -96,13 +96,7 @@ sub _connect {
         or warn "$0: connect: " . $self->_socket_error . "\n";
 
     local $self->{skip_connect} = 1;  # avoid infinite recursion :-)
-    $self->_send(
-        "\x10" . pack("C/a*",
-            "\0\x06MQIsdp\x03\x02\0\x3c" . pack("n/a*",
-                "Net::MQTT::Simple[$$]"
-            )
-        )
-    );
+    $self->_send_connect;
     $self->_send_subscribe;
 }
 
@@ -131,6 +125,16 @@ sub _send {
         or delete $self->{socket};  # reconnect on next message
 
     $self->{last_send} = time;
+}
+
+sub _send_connect {
+    my ($self) = @_;
+
+    $self->_send("\x10" . _prepend_variable_length(
+        "\0\x06MQIsdp\x03\x02"
+        . pack("n", $KEEPALIVE_INTERVAL)
+        . pack("n/a*", "Net::MQTT::Simple[$$]")
+    ));
 }
 
 sub _send_subscribe {
