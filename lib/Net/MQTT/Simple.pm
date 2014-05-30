@@ -85,6 +85,7 @@ sub _connect {
         return;
     }
     $self->{last_connect} = time;
+    $self->{buffer} = "";
 
     my $socket_class = $self->_socket_class;
     my %socket_options = (
