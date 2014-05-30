@@ -7,6 +7,7 @@ our $VERSION = '1.15';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 60;
+our $PING_TIMEOUT = 10;
 our $RECONNECT_INTERVAL = 5;
 our $MAX_LENGTH = 2097152;    # 2 MB
 our $READ_BYTES = 16 * 1024;  # 16 kB per IO::Socket::SSL recommendation
@@ -69,7 +70,6 @@ sub new {
 
     return bless {
         server       => $server,
-        buffer       => "",
         last_connect => 0,
         sockopts     => $sockopts // {},
     }, $class;
@@ -84,9 +84,13 @@ sub _connect {
         select undef, undef, undef, .01;
         return;
     }
+
+    # Reset state
     $self->{last_connect} = time;
     $self->{buffer} = "";
+    delete $self->{ping};
 
+    # Connect
     my $socket_class = $self->_socket_class;
     my %socket_options = (
         PeerAddr => $self->{server},
@@ -95,6 +99,7 @@ sub _connect {
     $self->{socket} = $socket_class->new( %socket_options )
         or warn "$0: connect: " . $self->_socket_error . "\n";
 
+    # Say hello
     local $self->{skip_connect} = 1;  # avoid infinite recursion :-)
     $self->_send_connect;
     $self->_send_subscribe;
@@ -255,9 +260,15 @@ sub run {
     $self->subscribe(@subscribe_args) if @subscribe_args;
 
     until ($self->{stop_loop}) {
-        my $timeout = exists $self->{last_send}
-            ? $KEEPALIVE_INTERVAL - (time() - $self->{last_send})
-            : 1;
+        my @timeouts;
+        push @timeouts, $KEEPALIVE_INTERVAL - (time() - $self->{last_send})
+            if exists $self->{last_send};
+        push @timeouts, $PING_TIMEOUT - (time() - $self->{ping})
+            if exists $self->{ping};
+
+        my $timeout = @timeouts
+            ? (sort { $a <=> $b } @timeouts)[0]
+            : 1;  # default to 1
 
         $self->tick($timeout);
     }
@@ -285,7 +296,6 @@ sub tick {
     $self->_connect;
 
     my $socket = $self->{socket} or return;
-
     my $bufref = \$self->{buffer};
 
     my $r = '';
@@ -298,11 +308,16 @@ sub tick {
         while (length $$bufref) {
             my $packet = $self->_parse() or last;
             $self->_incoming_publish($packet) if $packet->{type} == 3;
+            delete $self->{ping}              if $packet->{type} == 13;
         }
     }
 
     if (time() >= $self->{last_send} + $KEEPALIVE_INTERVAL) {
         $self->_send("\xc0\0");  # PINGREQ
+        $self->{ping} = time;
+    }
+    if ($self->{ping} and time() >= $self->{ping} + $PING_TIMEOUT) {
+        delete $self->{socket};
     }
 
     return !! $self->{socket};
@@ -428,10 +443,11 @@ I<timeout> seconds (can be fractional). Use a timeout of C<0> to avoid
 blocking, but note that blocking automatic reconnection may take place, which
 may take much longer.
 
-If C<tick> returns false, this means the socket was no longer connected.
-However, a true value does not necessarily mean that the socket is still
-functional. The only way to reliably determine that a TCP stream is
-still connected, is to write data, which is only done periodically.
+If C<tick> returns false, this means that the socket was no longer connected
+and that the next call will cause a reconnection attempt. However, a true value
+does not necessarily mean that the socket is still functional. The only way to
+reliably determine that a TCP stream is still connected, is to actually
+communicate with the server, e.g. with a ping, which is only done periodically.
 
 =head1 UTILITY FUNCTIONS
 
