@@ -3,9 +3,13 @@ Revision history for Perl extension Net::MQTT::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
+1.16  Fri May 30 23:45 2014
+        - Bug fix: Clear buffer on reconnect to avoid garbage.
+        - New: Reconnect on ping timeout.
+
 1.15  Tue May 27 22:35 2014
         - Bug fix: Client certificates now work.
-        - Improvement: pattern tests now includes those from mosquitto.
+        - Improvement: Pattern tests now includes those from mosquitto.
           (Suggested by karlp in #mqtt)
 
 1.14  Tue May 27 13:09 2014
@@ -24,15 +28,15 @@ Incompatible changes are marked with "!!". Incompatibility with and changes in
         - Improvement: filter_as_regex is exposed and documented
 
 1.12  Mon May 26 16:24 2014
-        - Bug fix: update MANIFEST to include some new files
+        - Bug fix: Update MANIFEST to include some new files
           (Reported by foobar in #revspace)
-        - Bug fix: this file (Changes) mentioned the wrong distribution name
+        - Bug fix: This file (Changes) mentioned the wrong distribution name
           (Reported by foobar in #revspace)
         - Improvement: Only try one reconnect per 5 seconds
 
 1.11  Mon May 26 03:37 2014
-        - Bug fix: calculations for next ping were bad, resulting in ping flood
-        - Bug fix: avoid some Perl warnings under perl -w
+        - Bug fix: Calculations for next ping were bad, resulting in ping flood
+        - Bug fix: Avoid some Perl warnings under perl -w
         - Improvement: Emit warnings on stderr if connection failed
         - Improvement: Prevent possible infinite recursion
 
