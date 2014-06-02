@@ -33,7 +33,7 @@ sub filter_as_regex {
     my ($filter) = @_;
 
     return "^(?!\\\$)" if $filter eq '#';   # Match everything except /^\$/
-    return "^(?!\\\$)" if $filter eq '/#';  # Match everything except /^\$/
+    return "^/"        if $filter eq '/#';  # Parent (empty topic) is invalid
 
     $filter = quotemeta $filter;
 

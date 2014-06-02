@@ -3,6 +3,11 @@ Revision history for Perl extension Net::MQTT::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
+1.17  Not released yet
+        - Bug fix: /# also matched any topic that matches + (tests were wrong)
+          (Reported by ral in #mqtt)
+        - Improvement: tests for topics "" and "/"
+
 1.16  Fri May 30 23:45 2014
         - Bug fix: Clear buffer on reconnect to avoid garbage.
         - New: Reconnect on ping timeout.
