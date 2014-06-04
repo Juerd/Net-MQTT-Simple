@@ -7,6 +7,7 @@ Incompatible changes are marked with "!!". Incompatibility with and changes in
         - Bug fix: /# also matched any topic that matches + (tests were wrong)
           (Reported by ral in #mqtt)
         - Improvement: tests for topics "" and "/"
+        - Code cleanups
 
 1.16  Fri May 30 23:45 2014
         - Bug fix: Clear buffer on reconnect to avoid garbage.

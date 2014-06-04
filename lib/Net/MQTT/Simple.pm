@@ -11,6 +11,7 @@ our $PING_TIMEOUT = 10;
 our $RECONNECT_INTERVAL = 5;
 our $MAX_LENGTH = 2097152;    # 2 MB
 our $READ_BYTES = 16 * 1024;  # 16 kB per IO::Socket::SSL recommendation
+our $PROTOCOL_NAME = "MQIsdp";  # MQIsdp in v3.1, MQTT in v3.1.1
 
 my $global;
 
@@ -23,6 +24,8 @@ BEGIN {
 
 sub _default_port { 1883 }
 sub _socket_error { "$@" }
+
+sub _client_identifier { "Net::MQTT::Simple[$$]" }
 
 # Carp might not be available either.
 sub _croak {
@@ -135,11 +138,14 @@ sub _send {
 sub _send_connect {
     my ($self) = @_;
 
-    $self->_send("\x10" . _prepend_variable_length(
-        "\0\x06MQIsdp\x03\x02"
-        . pack("n", $KEEPALIVE_INTERVAL)
-        . pack("n/a*", "Net::MQTT::Simple[$$]")
-    ));
+    $self->_send("\x10" . _prepend_variable_length(pack(
+        "x C/a* C C n n/a*",
+        $PROTOCOL_NAME,
+        0x03,
+        0x02,
+        $KEEPALIVE_INTERVAL,
+        $self->_client_identifier
+    )));
 }
 
 sub _send_subscribe {
@@ -148,12 +154,10 @@ sub _send_subscribe {
     return if not exists $self->{sub};
 
     # Hardcoded "packet identifier" \0\0 for now. Hello? This is TCP.
-    $self->_send("\x82" . _prepend_variable_length(
-        "\0\0" .
-        join("", map "$_\0",
-            map pack("n/a*", $_), keys %{ $self->{sub} } 
-        )
-    ));
+    $self->_send("\x82" . _prepend_variable_length("\0\0" . pack(
+        "(n/a* x)*",  # x = QoS 0
+        keys %{ $self->{sub} } 
+    )));
 }
 
 sub _parse {

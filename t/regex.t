@@ -105,9 +105,9 @@ for (@matrix) {
     my $topic = shift @$_;
     my @should_match = @$_;
     my %should_not_match = %all_filters;
+    delete @should_not_match{ @should_match };
 
     for my $filter (@should_match) {
-        delete $should_not_match{ $filter };
         my $regex = far( $filter );
         like($topic, qr/$regex/, "'$topic' should match '$filter'");
     }
