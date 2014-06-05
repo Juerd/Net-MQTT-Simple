@@ -40,10 +40,10 @@ sub filter_as_regex {
 
     $filter = quotemeta $filter;
 
-    $filter =~ s{ \z (?<! \\ \/ \\ \# ) }"\\z"x;       # Anchor unless /#$/
-    $filter =~ s{ \\ \/ \\ \#           }""x;
-    $filter =~ s{ \\ \+                 }"[^/]*+"xg;
-    $filter =~ s{ ^ (?= \[ \^ / \] \* ) }"(?!\\\$)"x;  # No /^\$/ if /^\+/
+    $filter =~ s{ \z (?<! \\ \/ \\ \# ) } {\\z}x;       # Anchor unless /#$/
+    $filter =~ s{ \\ \/ \\ \#           } {}x;
+    $filter =~ s{ \\ \+                 } {[^/]*+}xg;
+    $filter =~ s{ ^ (?= \[ \^ / \] \* ) } {(?!\\\$)}x;  # No /^\$/ if /^\+/
 
     return "^$filter";
 }
