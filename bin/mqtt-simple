@@ -16,6 +16,7 @@ GetOptions(
     "p|publish=s"       => \my $publish,
     "r|retain"          => \my $retain,
     "m|message=s"       => \my $message,
+    "d|datetime"        => \my $datetime,
     "ssl"               => \my $ssl,
     "insecure"          => \my $insecure,
     "ca=s"              => \my $ca,
@@ -85,6 +86,7 @@ if (@topics) {
                         for $topic, $message;
                 }
 
+                print POSIX::strftime("%Y/%m/%d-%H:%M:%S ", localtime) if $datetime;
                 print "$ansi$topic$ansi_reset $message\n";
             });
     }
