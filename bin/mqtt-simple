@@ -16,7 +16,7 @@ GetOptions(
     "p|publish=s"       => \my $publish,
     "r|retain"          => \my $retain,
     "m|message=s"       => \my $message,
-    "d|datetime"        => \my $datetime,
+    "d|datetime:s"      => \my $datetime,
     "ssl"               => \my $ssl,
     "insecure"          => \my $insecure,
     "ca=s"              => \my $ca,
@@ -26,6 +26,7 @@ GetOptions(
 ) or die $usage;
 
 $host or die $usage;
+$datetime = "%Y-%m-%d %H:%M:%S" if defined $datetime and $datetime eq "";
 
 die "--ca, --cert, --key and --insecure require --ssl\n"
     if ($ca or $cert or $key or $insecure) and not $ssl;
@@ -86,7 +87,8 @@ if (@topics) {
                         for $topic, $message;
                 }
 
-                print POSIX::strftime("%Y/%m/%d-%H:%M:%S ", localtime) if $datetime;
+                print POSIX::strftime($datetime . " ", localtime)
+                    if defined $datetime;
                 print "$ansi$topic$ansi_reset $message\n";
             });
     }
@@ -166,6 +168,11 @@ Color is enabled by default if I<stdout> is a terminal.
 Pass ASCII control characters unaltered. By default, they're replaced by C<^@>
 notation or, when C<--color> is enabled, reverse video characters. For example,
 an ASCII newline would be displayed as C<^J> unless C<--raw> is used.
+
+=item -d --datetime I<format>
+
+Prefix messages with a timestamp. Optionally, a I<format> for C<strftime> can
+be supplied.
 
 =back
 
