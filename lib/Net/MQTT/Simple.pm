@@ -3,7 +3,7 @@ package Net::MQTT::Simple;
 # use strict;    # might not be available (e.g. on openwrt)
 # use warnings;  # same.
 
-our $VERSION = '1.16';
+our $VERSION = '1.21';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 60;
@@ -149,15 +149,32 @@ sub _send_connect {
 }
 
 sub _send_subscribe {
-    my ($self) = @_;
+    my ($self, @topics) = @_;
 
-    return if not exists $self->{sub};
+    if (not @topics) {
+        @topics = keys %{ $self->{sub} } or return;
+    }
+    return if not @topics;
 
-    # Hardcoded "packet identifier" \0\0 for now. Hello? This is TCP.
-    $self->_send("\x82" . _prepend_variable_length("\0\0" . pack(
-        "(n/a* x)*",  # x = QoS 0
-        keys %{ $self->{sub} } 
-    )));
+    utf8::encode($_) for @topics;
+
+    # Hardcoded "packet identifier" \0\0 for now.
+    $self->_send("\x82" . _prepend_variable_length("\0\0" .
+        pack("(n/a* x)*", @topics)  # x = QoS 0
+    ));
+}
+
+sub _send_unsubscribe {
+    my ($self, @topics) = @_;
+
+    return if not @topics;
+
+    utf8::encode($_) for @topics;
+
+    # Hardcoded "packet identifier" \0\0 for now.
+    $self->_send("\xa2" . _prepend_variable_length("\0\0" .
+        pack("(n/a*)*", @topics)
+    ));
 }
 
 sub _parse {
@@ -218,7 +235,7 @@ sub _incoming_publish {
 
     for my $cb (@{ $self->{callbacks} }) {
         if ($topic =~ /$cb->{regex}/) {
-            $cb->{callback}->($topic, $message);
+            $cb->{callback}->($topic, $message, $packet->{retain});
             return;
         }
     }
@@ -286,12 +303,25 @@ sub subscribe {
     while (my ($topic, $callback) = splice @kv, 0, 2) {
         $self->{sub}->{ $topic } = 1;
         push @{ $self->{callbacks} }, {
+            topic => $topic,
             regex => filter_as_regex($topic),
             callback => $callback,
         };
     }
 
     $self->_send_subscribe() if $self->{socket};
+}
+
+sub unsubscribe {
+    my ($self, @topics) = @_;
+
+    $self->_send_unsubscribe(@topics);
+
+    my $cb = $self->{callbacks};
+    @$cb = grep $_->{topic} ne $_, @$cb
+        for @topics;
+
+    delete @{ $self->{sub} }{ @topics };
 }
 
 sub tick {
@@ -434,6 +464,12 @@ messages about events that occur (like that a button was pressed).
 Subscribes to the given topic(s) and registers the callbacks. Note that only
 the first matching handler will be called for every message, even if filter
 patterns overlap.
+
+=head2 unsubscribe(topic[, topic, ...]) {
+
+Unsubscribes from the given topic(s) and unregisters the corresponding
+callbacks. The given topics must exactly match topics that were previously
+used with the C<subscribe> method.
 
 =head2 run(...)
 

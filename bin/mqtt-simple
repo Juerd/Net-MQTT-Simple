@@ -12,6 +12,9 @@ GetOptions(
     "h|host=s"          => \my $host,
     "c|color!"          => \(my $color = -t STDOUT),
     "raw"               => \my $raw,
+    "1|one"             => \my $one,
+    "count=i"           => \my $count,
+    "message-only"      => \my $message_only,
     "s|t|subscribe=s"   => \my @topics,
     "p|publish=s"       => \my $publish,
     "r|retain"          => \my $retain,
@@ -41,6 +44,12 @@ $ENV{MQTT_SIMPLE_SSL_CA}   = $ca   if $ca;
 $ENV{MQTT_SIMPLE_SSL_CERT} = $cert if $cert;
 $ENV{MQTT_SIMPLE_SSL_KEY}  = $key  if $key;
 $ENV{MQTT_SIMPLE_SSL_INSECURE} = 1 if $insecure;
+
+if ($one) {
+    die "--count and --one cannot be combined" if $count;
+    $count = 1;
+    $message_only = 1;
+}
 
 my $m = $class->new($host);
 
@@ -79,8 +88,9 @@ if (@topics) {
             $_ => sub {
                 my ($topic, $message) = @_;
                 $topic =~ /$_/ and return for @exceptions;
+
                 utf8::encode($topic);
-                # $message is binary data so our output can have mixed encodings.
+                # $message is binary data so our output can have mixed encodings
 
                 unless ($raw) {
                     s/([\0-\x1F])/$iv . chr(64 + ord $1) . $pv/ge
@@ -89,7 +99,13 @@ if (@topics) {
 
                 print POSIX::strftime($datetime . " ", localtime)
                     if defined $datetime;
-                print "$ansi$topic$ansi_reset $message\n";
+
+                print "$ansi$topic$ansi_reset "
+                    unless $message_only;
+
+                print "$message\n";
+
+                exit if defined $count and --$count == 0;
             });
     }
     $m->run;
@@ -151,6 +167,18 @@ multiple times.
 =item -e --except I<filter>
 
 Suppress published messages that match I<filter>. Can be given multiple times.
+
+=item --count I<number>
+
+Quit after receiving I<number> messages.
+
+=item --message-only
+
+Output only the message values, without the topics.
+
+=item -1 --one
+
+Shortcut for C<--count 1 --message-only>.
 
 =item --color
 
