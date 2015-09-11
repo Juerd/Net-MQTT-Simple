@@ -4,6 +4,8 @@ use strict;
 use Net::MQTT::Simple;
 use Getopt::Long qw(GetOptions);
 
+$| = 1;
+
 my $usage = "Usage: man mqtt-simple ;-)\n";
 
 my @colors = qw(33;1 32;1 31;1 35;1 36;1 37;1 33 32 31 35 36); 
