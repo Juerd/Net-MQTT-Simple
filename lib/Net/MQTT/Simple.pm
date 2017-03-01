@@ -399,7 +399,7 @@ Net::MQTT::Simple - Minimal MQTT version 3 interface
             my ($topic, $message) = @_;
             print "[$topic] $message\n";
         },
-    }
+    );
 
 =head1 DESCRIPTION
 
