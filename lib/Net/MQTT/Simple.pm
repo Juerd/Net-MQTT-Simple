@@ -475,7 +475,7 @@ colon. The functions C<publish> and C<retain> will be exported.
 
 =head2 Object oriented interface
 
-=head3 new(server[, sockopts])
+=head3 new(server[, sockopts][, will_topic][, will_message][, will_retain])
 
 Specify the server (possibly with a colon and port number) to the constructor,
 C<< Net::MQTT::Simple->new >>. The socket is disconnected when the object goes
@@ -483,6 +483,17 @@ out of scope.
 
 Optionally, a reference to a hash of socket options can be passed. Options
 specified in this hash are passed on to the socket constructor.
+
+Additionally, an optional "Last Will" topic, message, and retain flag for the
+message may be registered with the server on connection. This message will be
+published if the script exits without callng C<disconnect>.
+
+=head1 DISCONNECTING GRACEFULLY
+
+=head2 disconnect
+
+Performs a graceful disconnect, which ensures that the server does NOT send
+the registered "Last Will" message.
 
 =head1 PUBLISHING MESSAGES
 
@@ -575,11 +586,6 @@ indicate that it has already been sent before.
 =item Authentication
 
 No username and password are sent to the server.
-
-=item Last will
-
-The server won't publish a "last will" message on behalf of us when our
-connection's gone.
 
 =item Large data
 
