@@ -391,6 +391,16 @@ sub tick {
     return !! $self->{socket};
 }
 
+sub disconnect {
+    my ($self) = @_;
+    return if !exists ($self->{socket});
+    if ($self->{socket}->connected) {
+        $self->_send (pack (" C x", 0xe0));
+    }
+
+    delete $self->{socket};
+}
+
 1;
 
 __END__
