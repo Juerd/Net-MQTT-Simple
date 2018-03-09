@@ -465,7 +465,7 @@ Subscribes to the given topic(s) and registers the callbacks. Note that only
 the first matching handler will be called for every message, even if filter
 patterns overlap.
 
-=head2 unsubscribe(topic[, topic, ...]) {
+=head2 unsubscribe(topic[, topic, ...])
 
 Unsubscribes from the given topic(s) and unregisters the corresponding
 callbacks. The given topics must exactly match topics that were previously
