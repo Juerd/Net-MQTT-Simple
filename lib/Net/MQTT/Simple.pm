@@ -61,8 +61,11 @@ sub import {
 }
 
 sub new {
-    my ($class, $server, $sockopts) = @_;
-    @_ == 2 or @_ == 3 or _croak "Wrong number of arguments for $class->new";
+    my ($class, $server, @other) = @_;
+    my $sockopts = (@other > 0 && ref $other[0] eq 'HASH' ? shift @other : {});
+    my ($will_topic, $will_message, $will_retain) = @other;
+    (@_ >= 2 and @_ <= 6) or _croak "Wrong number of arguments for $class->new";
+
     my $port = $class->_default_port;
 
     # Add port for bare IPv6 address
@@ -74,7 +77,10 @@ sub new {
     return bless {
         server       => $server,
         last_connect => 0,
-        sockopts     => $sockopts // {},
+        sockopts     => $sockopts,
+        will_topic   => $will_topic,
+        will_message => $will_message // '',
+        will_retain  => $will_retain // 0,
     }, $class;
 }
 
@@ -104,7 +110,12 @@ sub _connect {
 
     # Say hello
     local $self->{skip_connect} = 1;  # avoid infinite recursion :-)
-    $self->_send_connect;
+    if ($self->{will_topic}) {
+        $self->_send_connect_with_will;
+    } else {
+        $self->_send_connect;
+    }
+
     $self->_send_subscribe;
 }
 
@@ -145,6 +156,29 @@ sub _send_connect {
         0x02,
         $KEEPALIVE_INTERVAL,
         $self->_client_identifier
+    )));
+}
+
+sub _send_connect_with_will {
+    my ($self) = @_;
+
+    my ($topic, $message, $retain) = ( $self->{will_topic}, $self->{will_message}, $self->{will_retain} );
+    utf8::encode ($topic);
+    utf8::downgrade($message, 1) or do {
+        my ($file, $line, $method) = (caller 1)[1, 2, 3];
+        warn "Wide character in $method at $file line $line.\n";
+        utf8::encode($message);
+    };
+
+    $self->_send("\x10" . _prepend_variable_length(pack(
+        "x C/a* C C n n/a* n/a* n/a*",
+        $PROTOCOL_NAME,
+        0x03,
+        0x06 + ($retain ? 0x20 : 0),
+        $KEEPALIVE_INTERVAL,
+        $self->_client_identifier,
+        $topic,
+        $message
     )));
 }
 
