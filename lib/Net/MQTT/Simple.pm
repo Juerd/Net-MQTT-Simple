@@ -163,10 +163,12 @@ sub _send {
     my ($self, $data) = @_;
 
     $self->_connect unless exists $self->{skip_connect};
+    delete $self->{skip_connect};
+
     my $socket = $self->{socket} or return;
 
     syswrite $socket, $data
-        or delete $self->{socket};  # reconnect on next message
+        or $self->_drop_connection;  # reconnect on next message
 
     $self->{last_send} = time;
 }
@@ -245,7 +247,7 @@ sub _parse {
         # On receiving an enormous packet, just disconnect to avoid exhausting
         # RAM on tiny systems.
         # TODO: just slurp and drop the data
-        delete $self->{socket};
+        $self->_drop_connection;
         return;
     }
 
@@ -393,7 +395,7 @@ sub tick {
         $self->{ping} = time;
     }
     if ($self->{ping} and time() >= $self->{ping} + $PING_TIMEOUT) {
-        delete $self->{socket};
+        $self->_drop_connection;
     }
 
     return !! $self->{socket};
@@ -401,12 +403,18 @@ sub tick {
 
 sub disconnect {
     my ($self) = @_;
-    return if !exists ($self->{socket});
-    if ($self->{socket}->connected) {
-        $self->_send (pack (" C x", 0xe0));
-    }
+
+    $self->_send(pack "C x", 0xe0)
+        if $self->{socket} and $self->{socket}->connected;
+
+    $self->_drop_connection;
+}
+
+sub _drop_connection {
+    my ($self) = @_;
 
     delete $self->{socket};
+    $self->{last_connect} = 0;
 }
 
 1;
