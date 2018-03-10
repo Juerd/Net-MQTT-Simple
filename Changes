@@ -3,6 +3,9 @@ Revision history for Perl extension Net::MQTT::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
+1.22
+        - New: last_will and disconnect (Contributed by nicramage via Github)
+
 1.21  Sat Sep 12 1:32 2015
         - New: options --count, --message-only, --one in command line utility
         - Bug fix: enable autoflush in utility, for better pipe compatibility

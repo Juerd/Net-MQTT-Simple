@@ -3,7 +3,7 @@ package Net::MQTT::Simple;
 # use strict;    # might not be available (e.g. on openwrt)
 # use warnings;  # same.
 
-our $VERSION = '1.21';
+our $VERSION = '1.22';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 60;
@@ -61,10 +61,8 @@ sub import {
 }
 
 sub new {
-    my ($class, $server, @other) = @_;
-    my $sockopts = (@other > 0 && ref $other[0] eq 'HASH' ? shift @other : {});
-    my ($will_topic, $will_message, $will_retain) = @other;
-    (@_ >= 2 and @_ <= 6) or _croak "Wrong number of arguments for $class->new";
+    my ($class, $server, $sockopts) = @_;
+    @_ == 2 or @_ == 3 or _croak "Wrong number of arguments for $class->new";
 
     my $port = $class->_default_port;
 
@@ -77,11 +75,43 @@ sub new {
     return bless {
         server       => $server,
         last_connect => 0,
-        sockopts     => $sockopts,
-        will_topic   => $will_topic,
-        will_message => $will_message // '',
-        will_retain  => $will_retain // 0,
+        sockopts     => $sockopts // {},
     }, $class;
+}
+
+sub last_will {
+    my ($self, $topic, $message, $retain) = @_;
+
+    my %old;
+    %old = %{ $self->{will} } if $self->{will};
+
+    _croak "Wrong number of arguments for last_will" if @_ > 4;
+
+    if (@_ >= 2) {
+        if (not defined $topic and not defined $message) {
+            delete $self->{will};
+            delete $self->{encoded_will};
+
+            return;
+        } else {
+            $self->{will} = {
+                topic   => $topic    // $old{topic}   // '',
+                message => $message  // $old{message} // '',
+                retain  => !!$retain // $old{retain}  // 0,
+            };
+            _croak("Topic is empty") if not length $self->{will}->{topic};
+
+            my $e = $self->{encoded_will} = { %{ $self->{will} } };
+            utf8::encode($e->{topic});
+            utf8::downgrade($e->{message}, 1) or do {
+                my ($file, $line, $method) = (caller 1)[1, 2, 3];
+                warn "Wide character in $method at $file line $line.\n";
+                utf8::encode($e->{message});
+            };
+        }
+    }
+
+    return @{ $self->{will} }{qw/topic message retain/};
 }
 
 sub _connect {
@@ -110,12 +140,7 @@ sub _connect {
 
     # Say hello
     local $self->{skip_connect} = 1;  # avoid infinite recursion :-)
-    if ($self->{will_topic}) {
-        $self->_send_connect_with_will;
-    } else {
-        $self->_send_connect;
-    }
-
+    $self->_send_connect;
     $self->_send_subscribe;
 }
 
@@ -149,36 +174,19 @@ sub _send {
 sub _send_connect {
     my ($self) = @_;
 
-    $self->_send("\x10" . _prepend_variable_length(pack(
-        "x C/a* C C n n/a*",
-        $PROTOCOL_NAME,
-        0x03,
-        0x02,
-        $KEEPALIVE_INTERVAL,
-        $self->_client_identifier
-    )));
-}
-
-sub _send_connect_with_will {
-    my ($self) = @_;
-
-    my ($topic, $message, $retain) = ( $self->{will_topic}, $self->{will_message}, $self->{will_retain} );
-    utf8::encode ($topic);
-    utf8::downgrade($message, 1) or do {
-        my ($file, $line, $method) = (caller 1)[1, 2, 3];
-        warn "Wide character in $method at $file line $line.\n";
-        utf8::encode($message);
-    };
+    my $will = $self->{encoded_will};
+    my $flags = 0x02;
+    $flags |= 0x04 if $will;
+    $flags |= 0x20 if $will and $will->{retain};
 
     $self->_send("\x10" . _prepend_variable_length(pack(
-        "x C/a* C C n n/a* n/a* n/a*",
+        "x C/a* C C n n/a*" . ($will ? "n/a* n/a*" : ""),
         $PROTOCOL_NAME,
         0x03,
-        0x06 + ($retain ? 0x20 : 0),
+        $flags,
         $KEEPALIVE_INTERVAL,
         $self->_client_identifier,
-        $topic,
-        $message
+        ($will ? ($will->{topic}, $will->{message}) : ()),
     )));
 }
 
@@ -475,7 +483,7 @@ colon. The functions C<publish> and C<retain> will be exported.
 
 =head2 Object oriented interface
 
-=head3 new(server[, sockopts][, will_topic][, will_message][, will_retain])
+=head3 new(server[, sockopts])
 
 Specify the server (possibly with a colon and port number) to the constructor,
 C<< Net::MQTT::Simple->new >>. The socket is disconnected when the object goes
@@ -484,9 +492,24 @@ out of scope.
 Optionally, a reference to a hash of socket options can be passed. Options
 specified in this hash are passed on to the socket constructor.
 
-Additionally, an optional "Last Will" topic, message, and retain flag for the
-message may be registered with the server on connection. This message will be
-published if the script exits without callng C<disconnect>.
+=head3 last_will([$topic, $message[, $retain]])
+
+Set a "Last Will and Testament", to be used on subsequent connections. Note
+that the last will cannot be updated for a connection that is already
+established.
+
+A last will is a message that is published by the broker on behalf of the
+client, if the connection is dropped without an explicit call to C<disconnect>.
+
+Without arguments, returns the current values without changing the
+active configuration.
+
+When the given topic and message are both undef, the last will is deconfigured.
+In other cases, only arguments which are C<defined> are updated with the given
+value. For the first setting, the topic is mandatory, the message defaults to
+an empty string, and the retain flag defaults to false.
+
+Returns a list of the three values in the same order as the arguments.
 
 =head1 DISCONNECTING GRACEFULLY
 
@@ -494,6 +517,9 @@ published if the script exits without callng C<disconnect>.
 
 Performs a graceful disconnect, which ensures that the server does NOT send
 the registered "Last Will" message.
+
+Subsequent calls that require a connection, will cause a new connection to be
+set up.
 
 =head1 PUBLISHING MESSAGES
 
