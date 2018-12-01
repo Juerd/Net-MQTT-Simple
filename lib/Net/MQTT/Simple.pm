@@ -24,6 +24,7 @@ BEGIN {
 
 sub _default_port { 1883 }
 sub _socket_error { "$@" }
+sub _secure { 0 }
 
 sub _client_identifier { "Net::MQTT::Simple[$$]" }
 
@@ -74,6 +75,8 @@ sub new {
 
     return bless {
         server       => $server,
+        username     => $username,
+        password     => $password,
         last_connect => 0,
         sockopts     => $sockopts // {},
     }, $class;
@@ -112,6 +115,23 @@ sub last_will {
     }
 
     return @{ $self->{will} }{qw/topic message retain/};
+}
+
+sub login {
+    my ($self, $username, $password) = @_;
+
+
+    if (@_ > 1) {
+        _croak "Password login is disabled for insecure connections"
+            if defined $password
+            and not $self->_secure || $ENV{MQTT_SIMPLE_ALLOW_INSECURE_LOGIN};
+
+        utf8::encode($username);
+        $self->{username} = $username;
+        $self->{password} = $password;
+    }
+
+    return $username;
 }
 
 sub _connect {
@@ -181,14 +201,22 @@ sub _send_connect {
     $flags |= 0x04 if $will;
     $flags |= 0x20 if $will and $will->{retain};
 
+    $flags |= 0x80 if defined $self->{username};
+    $flags |= 0x40 if defined $self->{username} and defined $self->{password};
+
     $self->_send("\x10" . _prepend_variable_length(pack(
-        "x C/a* C C n n/a*" . ($will ? "n/a* n/a*" : ""),
+        "x C/a* C C n n/a*"
+            . ($flags & 0x04 ? "n/a* n/a*" : "")
+            . ($flags & 0x80 ? "n/a*" : "")
+            . ($flags & 0x40 ? "n/a*" : ""),
         $PROTOCOL_NAME,
         0x03,
         $flags,
         $KEEPALIVE_INTERVAL,
         $self->_client_identifier,
-        ($will ? ($will->{topic}, $will->{message}) : ()),
+        ($flags & 0x04 ? ($will->{topic}, $will->{message}) : ()),
+        ($flags & 0x80 ? $self->{username} : ()),
+        ($flags & 0x40 ? $self->{password} : ()),
     )));
 }
 
@@ -518,6 +546,20 @@ value. For the first setting, the topic is mandatory, the message defaults to
 an empty string, and the retain flag defaults to false.
 
 Returns a list of the three values in the same order as the arguments.
+
+=head3 login($username[, $password])
+
+Sets authentication credentials, to be used on subsequent connections. Note
+that the credentials cannot be updated for a connection that is already
+established.
+
+The username is text, the password is binary.
+
+See L<Net::MQTT::Simple::SSL> for information about secure connections. To
+enable insecure password authenticated connections, set the environment
+variable MQTT_SIMPLE_ALLOW_INSECURE_LOGIN to a true value.
+
+Returns the username.
 
 =head1 DISCONNECTING GRACEFULLY
 
