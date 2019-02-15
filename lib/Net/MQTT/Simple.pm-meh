@@ -1,17 +1,16 @@
 package Net::MQTT::Simple;
 
-use strict;
-use warnings;
+# use strict;    # might not be available (e.g. on openwrt)
+# use warnings;  # same.
 
-our $VERSION = '1.23';
+our $VERSION = '1.15';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 60;
-our $PING_TIMEOUT = 10;
+our $RECEIVE_TIMEOUT = 9;
 our $RECONNECT_INTERVAL = 5;
 our $MAX_LENGTH = 2097152;    # 2 MB
 our $READ_BYTES = 16 * 1024;  # 16 kB per IO::Socket::SSL recommendation
-our $PROTOCOL_NAME = "MQIsdp";  # MQIsdp in v3.1, MQTT in v3.1.1
 
 my $global;
 
@@ -24,9 +23,6 @@ BEGIN {
 
 sub _default_port { 1883 }
 sub _socket_error { "$@" }
-sub _secure { 0 }
-
-sub _client_identifier { "Net::MQTT::Simple[$$]" }
 
 # Carp might not be available either.
 sub _croak {
@@ -37,14 +33,14 @@ sub filter_as_regex {
     my ($filter) = @_;
 
     return "^(?!\\\$)" if $filter eq '#';   # Match everything except /^\$/
-    return "^/"        if $filter eq '/#';  # Parent (empty topic) is invalid
+    return "^(?!\\\$)" if $filter eq '/#';  # Match everything except /^\$/
 
     $filter = quotemeta $filter;
 
-    $filter =~ s{ \z (?<! \\ \/ \\ \# ) } {\\z}x;       # Anchor unless /#$/
-    $filter =~ s{ \\ \/ \\ \#           } {}x;
-    $filter =~ s{ \\ \+                 } {[^/]*+}xg;
-    $filter =~ s{ ^ (?= \[ \^ / \] \* ) } {(?!\\\$)}x;  # No /^\$/ if /^\+/
+    $filter =~ s{ \z (?<! \\ \/ \\ \# ) }"\\z"x;       # Anchor unless /#$/
+    $filter =~ s{ \\ \/ \\ \#           }""x;
+    $filter =~ s{ \\ \+                 }"[^/]*+"xg;
+    $filter =~ s{ ^ (?= \[ \^ / \] \* ) }"(?!\\\$)"x;  # No /^\$/ if /^\+/
 
     return "^$filter";
 }
@@ -64,7 +60,6 @@ sub import {
 sub new {
     my ($class, $server, $sockopts) = @_;
     @_ == 2 or @_ == 3 or _croak "Wrong number of arguments for $class->new";
-
     my $port = $class->_default_port;
 
     # Add port for bare IPv6 address
@@ -75,61 +70,10 @@ sub new {
 
     return bless {
         server       => $server,
+        buffer       => "",
         last_connect => 0,
         sockopts     => $sockopts // {},
     }, $class;
-}
-
-sub last_will {
-    my ($self, $topic, $message, $retain) = @_;
-
-    my %old;
-    %old = %{ $self->{will} } if $self->{will};
-
-    _croak "Wrong number of arguments for last_will" if @_ > 4;
-
-    if (@_ >= 2) {
-        if (not defined $topic and not defined $message) {
-            delete $self->{will};
-            delete $self->{encoded_will};
-
-            return;
-        } else {
-            $self->{will} = {
-                topic   => $topic    // $old{topic}   // '',
-                message => $message  // $old{message} // '',
-                retain  => !!$retain // $old{retain}  // 0,
-            };
-            _croak("Topic is empty") if not length $self->{will}->{topic};
-
-            my $e = $self->{encoded_will} = { %{ $self->{will} } };
-            utf8::encode($e->{topic});
-            utf8::downgrade($e->{message}, 1) or do {
-                my ($file, $line, $method) = (caller 1)[1, 2, 3];
-                warn "Wide character in $method at $file line $line.\n";
-                utf8::encode($e->{message});
-            };
-        }
-    }
-
-    return @{ $self->{will} }{qw/topic message retain/};
-}
-
-sub login {
-    my ($self, $username, $password) = @_;
-
-
-    if (@_ > 1) {
-        _croak "Password login is disabled for insecure connections"
-            if defined $password
-            and not $self->_secure || $ENV{MQTT_SIMPLE_ALLOW_INSECURE_LOGIN};
-
-        utf8::encode($username);
-        $self->{username} = $username;
-        $self->{password} = $password;
-    }
-
-    return $username;
 }
 
 sub _connect {
@@ -141,13 +85,8 @@ sub _connect {
         select undef, undef, undef, .01;
         return;
     }
+    $self->{last_connect} = $self->{last_receive} = time;
 
-    # Reset state
-    $self->{last_connect} = time;
-    $self->{buffer} = "";
-    delete $self->{ping};
-
-    # Connect
     my $socket_class = $self->_socket_class;
     my %socket_options = (
         PeerAddr => $self->{server},
@@ -156,9 +95,7 @@ sub _connect {
     $self->{socket} = $socket_class->new( %socket_options )
         or warn "$0: connect: " . $self->_socket_error . "\n";
 
-    # Say hello
     local $self->{skip_connect} = 1;  # avoid infinite recursion :-)
-    $self->_send_connect;
     $self->_send_subscribe;
 }
 
@@ -181,12 +118,10 @@ sub _send {
     my ($self, $data) = @_;
 
     $self->_connect unless exists $self->{skip_connect};
-    delete $self->{skip_connect};
-
     my $socket = $self->{socket} or return;
 
     syswrite $socket, $data
-        or $self->_drop_connection;  # reconnect on next message
+        or delete $self->{socket};  # reconnect on next message
 
     $self->{last_send} = time;
 }
@@ -194,56 +129,24 @@ sub _send {
 sub _send_connect {
     my ($self) = @_;
 
-    my $will = $self->{encoded_will};
-    my $flags = 0x02;
-    $flags |= 0x04 if $will;
-    $flags |= 0x20 if $will and $will->{retain};
-
-    $flags |= 0x80 if defined $self->{username};
-    $flags |= 0x40 if defined $self->{username} and defined $self->{password};
-
-    $self->_send("\x10" . _prepend_variable_length(pack(
-        "x C/a* C C n n/a*"
-            . ($flags & 0x04 ? "n/a* n/a*" : "")
-            . ($flags & 0x80 ? "n/a*" : "")
-            . ($flags & 0x40 ? "n/a*" : ""),
-        $PROTOCOL_NAME,
-        0x03,
-        $flags,
-        $KEEPALIVE_INTERVAL,
-        $self->_client_identifier,
-        ($flags & 0x04 ? ($will->{topic}, $will->{message}) : ()),
-        ($flags & 0x80 ? $self->{username} : ()),
-        ($flags & 0x40 ? $self->{password} : ()),
-    )));
-}
-
-sub _send_subscribe {
-    my ($self, @topics) = @_;
-
-    if (not @topics) {
-        @topics = keys %{ $self->{sub} } or return;
-    }
-    return if not @topics;
-
-    utf8::encode($_) for @topics;
-
-    # Hardcoded "packet identifier" \0\0 for now.
-    $self->_send("\x82" . _prepend_variable_length("\0\0" .
-        pack("(n/a* x)*", @topics)  # x = QoS 0
+    $self->_send("\x10" . _prepend_variable_length(
+        "\0\x06MQIsdp\x03\x02"
+        . pack("n", $KEEPALIVE_INTERVAL)
+        . pack("n/a*", "Net::MQTT::Simple[$$]")
     ));
 }
 
-sub _send_unsubscribe {
-    my ($self, @topics) = @_;
+sub _send_subscribe {
+    my ($self) = @_;
 
-    return if not @topics;
+    return if not exists $self->{sub};
 
-    utf8::encode($_) for @topics;
-
-    # Hardcoded "packet identifier" \0\0 for now.
-    $self->_send("\xa2" . _prepend_variable_length("\0\0" .
-        pack("(n/a*)*", @topics)
+    # Hardcoded "packet identifier" \0\0 for now. Hello? This is TCP.
+    $self->_send("\x82" . _prepend_variable_length(
+        "\0\0" .
+        join("", map "$_\0",
+            map pack("n/a*", $_), keys %{ $self->{sub} } 
+        )
     ));
 }
 
@@ -273,7 +176,7 @@ sub _parse {
         # On receiving an enormous packet, just disconnect to avoid exhausting
         # RAM on tiny systems.
         # TODO: just slurp and drop the data
-        $self->_drop_connection;
+        delete $self->{socket};
         return;
     }
 
@@ -305,7 +208,7 @@ sub _incoming_publish {
 
     for my $cb (@{ $self->{callbacks} }) {
         if ($topic =~ /$cb->{regex}/) {
-            $cb->{callback}->($topic, $message, $packet->{retain});
+            $cb->{callback}->($topic, $message);
             return;
         }
     }
@@ -351,15 +254,9 @@ sub run {
     $self->subscribe(@subscribe_args) if @subscribe_args;
 
     until ($self->{stop_loop}) {
-        my @timeouts;
-        push @timeouts, $KEEPALIVE_INTERVAL - (time() - $self->{last_send})
-            if exists $self->{last_send};
-        push @timeouts, $PING_TIMEOUT - (time() - $self->{ping})
-            if exists $self->{ping};
-
-        my $timeout = @timeouts
-            ? (sort { $a <=> $b } @timeouts)[0]
-            : 1;  # default to 1
+        my $timeout = exists $self->{last_send}
+            ? $KEEPALIVE_INTERVAL - (time() - $self->{last_send})
+            : 1;
 
         $self->tick($timeout);
     }
@@ -373,25 +270,12 @@ sub subscribe {
     while (my ($topic, $callback) = splice @kv, 0, 2) {
         $self->{sub}->{ $topic } = 1;
         push @{ $self->{callbacks} }, {
-            topic => $topic,
             regex => filter_as_regex($topic),
             callback => $callback,
         };
     }
 
     $self->_send_subscribe() if $self->{socket};
-}
-
-sub unsubscribe {
-    my ($self, @topics) = @_;
-
-    $self->_send_unsubscribe(@topics);
-
-    my $cb = $self->{callbacks};
-    @$cb = grep $_->{topic} ne $_, @$cb
-        for @topics;
-
-    delete @{ $self->{sub} }{ @topics };
 }
 
 sub tick {
@@ -406,41 +290,27 @@ sub tick {
     vec($r, fileno($socket), 1) = 1;
 
     if (select $r, undef, undef, $timeout // 0) {
+        $self->{last_receive} = time;
+
         sysread $socket, $$bufref, $READ_BYTES, length $$bufref
             or delete $self->{socket};
 
         while (length $$bufref) {
             my $packet = $self->_parse() or last;
             $self->_incoming_publish($packet) if $packet->{type} == 3;
-            delete $self->{ping}              if $packet->{type} == 13;
         }
     }
 
     if (time() >= $self->{last_send} + $KEEPALIVE_INTERVAL) {
         $self->_send("\xc0\0");  # PINGREQ
-        $self->{ping} = time;
     }
-    if ($self->{ping} and time() >= $self->{ping} + $PING_TIMEOUT) {
-        $self->_drop_connection;
+    warn sprintf "%d >= %d + %d", time(), $self->{last_receive}, $RECEIVE_TIMEOUT;
+    if (time() >= $self->{last_receive} + $RECEIVE_TIMEOUT) {
+        warn "ja";
+        delete $self->{socket};
     }
 
     return !! $self->{socket};
-}
-
-sub disconnect {
-    my ($self) = @_;
-
-    $self->_send(pack "C x", 0xe0)
-        if $self->{socket} and $self->{socket}->connected;
-
-    $self->_drop_connection;
-}
-
-sub _drop_connection {
-    my ($self) = @_;
-
-    delete $self->{socket};
-    $self->{last_connect} = 0;
 }
 
 1;
@@ -485,7 +355,7 @@ Net::MQTT::Simple - Minimal MQTT version 3 interface
             my ($topic, $message) = @_;
             print "[$topic] $message\n";
         },
-    );
+    }
 
 =head1 DESCRIPTION
 
@@ -526,49 +396,6 @@ out of scope.
 Optionally, a reference to a hash of socket options can be passed. Options
 specified in this hash are passed on to the socket constructor.
 
-=head3 last_will([$topic, $message[, $retain]])
-
-Set a "Last Will and Testament", to be used on subsequent connections. Note
-that the last will cannot be updated for a connection that is already
-established.
-
-A last will is a message that is published by the broker on behalf of the
-client, if the connection is dropped without an explicit call to C<disconnect>.
-
-Without arguments, returns the current values without changing the
-active configuration.
-
-When the given topic and message are both undef, the last will is deconfigured.
-In other cases, only arguments which are C<defined> are updated with the given
-value. For the first setting, the topic is mandatory, the message defaults to
-an empty string, and the retain flag defaults to false.
-
-Returns a list of the three values in the same order as the arguments.
-
-=head3 login($username[, $password])
-
-Sets authentication credentials, to be used on subsequent connections. Note
-that the credentials cannot be updated for a connection that is already
-established.
-
-The username is text, the password is binary.
-
-See L<Net::MQTT::Simple::SSL> for information about secure connections. To
-enable insecure password authenticated connections, set the environment
-variable MQTT_SIMPLE_ALLOW_INSECURE_LOGIN to a true value.
-
-Returns the username.
-
-=head1 DISCONNECTING GRACEFULLY
-
-=head2 disconnect
-
-Performs a graceful disconnect, which ensures that the server does NOT send
-the registered "Last Will" message.
-
-Subsequent calls that require a connection, will cause a new connection to be
-set up.
-
 =head1 PUBLISHING MESSAGES
 
 The two methods for publishing messages are the same, except for the state of
@@ -594,12 +421,6 @@ Subscribes to the given topic(s) and registers the callbacks. Note that only
 the first matching handler will be called for every message, even if filter
 patterns overlap.
 
-=head2 unsubscribe(topic[, topic, ...])
-
-Unsubscribes from the given topic(s) and unregisters the corresponding
-callbacks. The given topics must exactly match topics that were previously
-used with the C<subscribe> method.
-
 =head2 run(...)
 
 Enters an infinite loop, which calls C<tick> repeatedly. If any arguments
@@ -612,11 +433,10 @@ I<timeout> seconds (can be fractional). Use a timeout of C<0> to avoid
 blocking, but note that blocking automatic reconnection may take place, which
 may take much longer.
 
-If C<tick> returns false, this means that the socket was no longer connected
-and that the next call will cause a reconnection attempt. However, a true value
-does not necessarily mean that the socket is still functional. The only way to
-reliably determine that a TCP stream is still connected, is to actually
-communicate with the server, e.g. with a ping, which is only done periodically.
+If C<tick> returns false, this means the socket was no longer connected.
+However, a true value does not necessarily mean that the socket is still
+functional. The only way to reliably determine that a TCP stream is
+still connected, is to write data, which is only done periodically.
 
 =head1 UTILITY FUNCTIONS
 
@@ -660,6 +480,11 @@ indicate that it has already been sent before.
 =item Authentication
 
 No username and password are sent to the server.
+
+=item Last will
+
+The server won't publish a "last will" message on behalf of us when our
+connection's gone.
 
 =item Large data
 
