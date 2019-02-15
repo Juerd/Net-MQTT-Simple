@@ -11,8 +11,8 @@ our $PING_TIMEOUT = 10;
 our $RECONNECT_INTERVAL = 5;
 our $MAX_LENGTH = 2097152;    # 2 MB
 our $READ_BYTES = 16 * 1024;  # 16 kB per IO::Socket::SSL recommendation
-our $PROTOCOL_LEVEL = 0x03;     # 0x03 in v3.1, 0x04 in v3.1.1
-our $PROTOCOL_NAME = "MQIsdp";  # MQIsdp in v3.1, MQTT in v3.1.1
+our $PROTOCOL_LEVEL = 0x04;   # 0x03 in v3.1, 0x04 in v3.1.1
+our $PROTOCOL_NAME = "MQTT";  # MQIsdp in v3.1, MQTT in v3.1.1
 
 my $global;
 
