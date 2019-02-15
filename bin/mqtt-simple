@@ -59,6 +59,9 @@ if ($one) {
 defined $publish or @topics or die $usage;
 
 my $m = $class->new($host);
+
+$username = $ENV{MQTT_SIMPLE_USERNAME} if not defined $username;
+$password = $ENV{MQTT_SIMPLE_PASSWORD} if not defined $password;
 $m->login($username, $password) if defined $username;
 
 if (defined $publish) {
