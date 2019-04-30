@@ -230,9 +230,8 @@ sub _send_subscribe {
 
     utf8::encode($_) for @topics;
 
-    # Hardcoded "packet identifier" \0\x01 for now (was \0\0, but mosquitto
-    # 1.6.1 doesn't allow that anymore, even though the MQTT 3.1.1 spec says
-    # the id only has to be non-zero when the QoS is also non-zero.)
+    # Hardcoded "packet identifier" \0\x01 for now (was \0\0 but the spec
+    # disallows it for subscribe packets and mosquitto started enforcing that.)
     $self->_send("\x82" . _prepend_variable_length("\0\x01" .
         pack("(n/a* x)*", @topics)  # x = QoS 0
     ));
