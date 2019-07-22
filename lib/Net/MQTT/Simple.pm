@@ -245,8 +245,8 @@ sub _send_unsubscribe {
 
     utf8::encode($_) for @topics;
 
-    # Hardcoded "packet identifier" \0\0 for now.
-    $self->_send("\xa2" . _prepend_variable_length("\0\0" .
+    # Hardcoded "packet identifier" \0\0x01 for now; see above.
+    $self->_send("\xa2" . _prepend_variable_length("\0\x01" .
         pack("(n/a*)*", @topics)
     ));
 }
