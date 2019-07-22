@@ -3,7 +3,7 @@ package Net::MQTT::Simple;
 use strict;
 use warnings;
 
-our $VERSION = '1.23';
+our $VERSION = '1.24';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 60;
