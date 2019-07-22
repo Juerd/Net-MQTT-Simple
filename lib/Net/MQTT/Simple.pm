@@ -59,6 +59,7 @@ sub import {
 
     $global = $class->new($server);
 
+    no strict 'refs';
     *{ (caller)[0] . "::publish" } = \&publish;
     *{ (caller)[0] . "::retain"  } = \&retain;
 }

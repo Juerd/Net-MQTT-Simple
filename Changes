@@ -3,7 +3,8 @@ Revision history for Perl extension Net::MQTT::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
-1.24
+1.24  2019-07-22 16:47
+        - Fix: The procedural interface broke in 1.23 (use strict related).
         - Change: retroactively updated changelog; the apparent bug in
           Mosquitto was actually a bug fix, triggering a bug in
           Net::MQTT::Simple that was caused by misinterpretation of the MQTT
