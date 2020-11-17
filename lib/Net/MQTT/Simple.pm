@@ -392,8 +392,9 @@ sub unsubscribe {
     $self->_send_unsubscribe(@topics);
 
     my $cb = $self->{callbacks};
-    @$cb = grep $_->{topic} ne $_, @$cb
-        for @topics;
+    for my $topic ( @topics ) {
+      @$cb = grep {$_->{topic} ne $topic} @$cb;
+    }
 
     delete @{ $self->{sub} }{ @topics };
 }
