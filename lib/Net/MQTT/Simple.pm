@@ -27,8 +27,8 @@ sub _default_port { 1883 }
 sub _socket_error { "$@" }
 sub _secure { 0 }
 
-my $random_id = join "", map chr 65 + int rand 26, 1 .. 10;
-sub _client_identifier { "Net::MQTT::Simple[$random_id]" }
+
+sub _client_identifier { my ($class) = @_; return "Net::MQTT::Simple[" . $class->{random_id} . "]"; }
 
 # Carp might not be available either.
 sub _croak {
@@ -76,10 +76,14 @@ sub new {
     # Add port for bare IPv4 address or bracketed IPv6 address
     $server .= ":$port" if $server !~ /:/ or $server =~ /^\[.*\]$/;
 
+	# Create a random ID for the instance of the object
+	my $random_id = join "", map chr 65 + int rand 26, 1 .. 10;
+	
     return bless {
         server       => $server,
         last_connect => 0,
         sockopts     => $sockopts // {},
+        random_id    => $random_id
     }, $class;
 }
 
