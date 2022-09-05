@@ -192,6 +192,11 @@ sub _send {
 
     my $socket = $self->{socket} or return;
 
+    while (my $chunk = substr $data, 0, $READ_BYTES, "") {
+        syswrite $socket, $chunk
+            or $self->_drop_connection;  # reconnect on next message
+    }
+
     syswrite $socket, $data
         or $self->_drop_connection;  # reconnect on next message
 
