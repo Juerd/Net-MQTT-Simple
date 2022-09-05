@@ -192,8 +192,10 @@ sub _send {
 
     my $socket = $self->{socket} or return;
 
-    syswrite $socket, $data
-        or $self->_drop_connection;  # reconnect on next message
+    while (my $chunk = substr $data, 0, 16384, "") {
+        syswrite $socket, $chunk
+            or $self->_drop_connection;  # reconnect on next message
+    }
 
     $self->{last_send} = time;
 }
