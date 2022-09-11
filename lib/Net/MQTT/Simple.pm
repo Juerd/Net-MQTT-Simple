@@ -3,7 +3,9 @@ package Net::MQTT::Simple;
 use strict;
 use warnings;
 
-our $VERSION = '1.27';
+use IO::Socket::IP;
+
+our $VERSION = '1.28';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 60;
@@ -17,17 +19,10 @@ our $PROTOCOL_NAME = "MQTT";  # MQIsdp in v3.1, MQTT in v3.1.1
 
 my $global;
 
-BEGIN {
-    *_socket_class =
-      eval { require IO::Socket::IP; 1 }   ? sub { "IO::Socket::IP" }
-    : eval { require IO::Socket::INET; 1 } ? sub { "IO::Socket::INET" }
-    : die "Neither IO::Socket::IP nor IO::Socket::INET found";
-}
-
 sub _default_port { 1883 }
+sub _socket_class { 'IO::Socket::IP' }
 sub _socket_error { "$@" }
 sub _secure { 0 }
-
 
 sub _client_identifier { my ($class) = @_; return "Net::MQTT::Simple[" . $class->{random_id} . "]"; }
 
