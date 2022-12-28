@@ -412,7 +412,7 @@ sub tick {
     my $r = '';
     vec($r, fileno($socket), 1) = 1;
 
-    if (select $r, undef, undef, $timeout // 0) {
+    if (select($r, undef, undef, $timeout // 0) > 0) {
         sysread $socket, $$bufref, $READ_BYTES, length $$bufref
             or delete $self->{socket};
 
