@@ -3,6 +3,7 @@ package Net::MQTT::Simple;
 use strict;
 use warnings;
 
+require Time::HiRes;
 use IO::Socket::IP;
 
 our $VERSION = '1.28';
@@ -450,6 +451,41 @@ sub _drop_connection {
     $self->{last_connect} = 0;
 }
 
+sub one_shot {
+  #Copyright: Michael R. Davis (c) 2023
+  #License: MIT
+  my $self      = shift;
+  my $topic_sub = shift or die("Error: subscribe topic is required");
+  my $topic_pub = shift or die("Error: publish topic is required");
+  my $message   = shift; $message = '' unless defined $message;       #default '', allow 0 and support perl 5.8
+  my $timeout   = shift || 1.5; #seconds
+
+  my $found     = 0; #anonymous sub updates these variables
+  my $topic_out;
+  my $message_out;
+
+  $self->subscribe($topic_sub =>  sub {
+                                        unless ($found) { #stop after first found but we get multiple calls per tick
+                                          $found       = 1;
+                                          $topic_out   = shift;
+                                          $message_out = shift;
+                                        }
+                                      }
+  );
+
+  $self->publish($topic_pub => $message);
+  
+  my $future    = Time::HiRes::time() + $timeout;
+  while (Time::HiRes::time() < $future) {
+    $self->tick($timeout); #it takes a few ticks to clear out LWT
+    last if $found;
+  }
+
+  $self->unsubscribe($topic_sub); #must unsubscribe to do one_shot back to back
+
+  return wantarray ? (topic => $topic_out, message => $message_out) : $message_out; #if widecard for sub want topic
+}
+
 1;
 
 __END__
@@ -624,6 +660,20 @@ and that the next call will cause a reconnection attempt. However, a true value
 does not necessarily mean that the socket is still functional. The only way to
 reliably determine that a TCP stream is still connected, is to actually
 communicate with the server, e.g. with a ping, which is only done periodically.
+
+=head1 PUBLISH/SUBSCRIBE COMBINATIONS
+
+=head2 one_shot
+
+Subscribe to a topic then publish and wait for the first response on that topic.  In scalar context returns the message value. In array context it returns a key/value list with C<topic> and C<message> keys.
+
+  my $message = $mqtt->one_shot($topic_subscribe, $topic_publish);
+  my $message = $mqtt->one_shot($topic_subscribe, $topic_publish => $message);
+  my %hash    = $mqtt->one_shot($topic_subscribe, $topic_publish => $message, $timeout); #is (topic=>$topic, message=>$message)
+
+Defaults: message => "", timeout => 1.5 seconds
+
+=cut
 
 =head1 UTILITY FUNCTIONS
 
