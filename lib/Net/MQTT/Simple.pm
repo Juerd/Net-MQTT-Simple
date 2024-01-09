@@ -156,8 +156,12 @@ sub _connect {
         PeerAddr => $self->{server},
         %{ $self->{sockopts} }
     );
-    $self->{socket} = $socket_class->new( %socket_options )
-        or warn "$0: connect: " . $self->_socket_error . "\n";
+    $self->{socket} = $socket_class->new( %socket_options );
+
+    if (not $self->{socket}) {
+        warn "$0: connect: " . $self->_socket_error . "\n";
+        return;
+    }
 
     # Say hello
     local $self->{skip_connect} = 1;  # avoid infinite recursion :-)
@@ -184,7 +188,6 @@ sub _send {
     my ($self, $data) = @_;
 
     $self->_connect unless exists $self->{skip_connect};
-    delete $self->{skip_connect};
 
     my $socket = $self->{socket} or return;
 
