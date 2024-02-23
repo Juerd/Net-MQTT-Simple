@@ -726,8 +726,8 @@ C<utf8::encode($message);>.
 This software may be redistributed under the terms of the GPL, LGPL, modified
 BSD, or Artistic license, or any of the other OSI approved licenses listed at
 http://www.opensource.org/licenses/alphabetical. Distribution is allowed under
-all of these these licenses, or any smaller subset of multiple or just one of
-these licenses.
+all of these licenses, or any smaller subset of multiple or just one of these
+licenses.
 
 When using a packaged version, please refer to the package metadata to see
 under which license terms it was distributed. Alternatively, a distributor may
