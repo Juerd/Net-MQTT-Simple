@@ -667,10 +667,6 @@ as "fire and forget".
 Since QoS is not supported, no retransmissions are done, and no message will
 indicate that it has already been sent before.
 
-=item Authentication
-
-No username and password are sent to the server.
-
 =item Large data
 
 Because everything is handled in memory and there's no way to indicate to the
