@@ -73,9 +73,9 @@ sub new {
     # Add port for bare IPv4 address or bracketed IPv6 address
     $server .= ":$port" if $server !~ /:/ or $server =~ /^\[.*\]$/;
 
-	# Create a random ID for the instance of the object
-	my $random_id = join "", map chr 65 + int rand 26, 1 .. 10;
-	
+    # Create a random ID for the instance of the object
+    my $random_id = join "", map chr 65 + int rand 26, 1 .. 10;
+
     return bless {
         server       => $server,
         last_connect => 0,
