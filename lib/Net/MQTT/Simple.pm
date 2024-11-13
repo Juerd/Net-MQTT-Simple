@@ -148,6 +148,7 @@ sub _connect {
     # Reset state
     $self->{last_connect} = time;
     $self->{buffer} = "";
+    $self->{subscribed} = {};
     delete $self->{ping};
 
     # Connect
@@ -227,12 +228,13 @@ sub _send_connect {
 }
 
 sub _send_subscribe {
-    my ($self, @topics) = @_;
+    my ($self) = @_;
 
-    if (not @topics) {
-        @topics = keys %{ $self->{sub} } or return;
-    }
-    return if not @topics;
+    my @topics = grep {
+        not exists $self->{subscribed}->{$_}
+    } keys %{ $self->{sub} };
+
+    @topics or return;
 
     utf8::encode($_) for @topics;
 
@@ -241,6 +243,8 @@ sub _send_subscribe {
     $self->_send("\x82" . _prepend_variable_length("\0\x01" .
         pack("(n/a* x)*", @topics)  # x = QoS 0
     ));
+
+    @{ $self->{subscribed} }{ @topics } = ();
 }
 
 sub _send_unsubscribe {
@@ -254,6 +258,8 @@ sub _send_unsubscribe {
     $self->_send("\xa2" . _prepend_variable_length("\0\x01" .
         pack("(n/a*)*", @topics)
     ));
+
+    delete @{ $self->{subscribed} }{ @topics };
 }
 
 sub _parse {
