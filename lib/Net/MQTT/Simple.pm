@@ -232,8 +232,8 @@ sub _send_subscribe {
     my ($self) = @_;
 
     my @topics = grep {
-        not exists $self->{subscribed}->{$_}
-    } keys %{ $self->{sub} };
+        not exists $self->{actually_subscribed}->{$_}
+    } keys %{ $self->{subscriptions} };
 
     @topics or return;
 
@@ -245,7 +245,7 @@ sub _send_subscribe {
         pack("(n/a* x)*", @topics)  # x = QoS 0
     ));
 
-    @{ $self->{subscribed} }{ @topics } = ();
+    @{ $self->{actually_subscribed} }{ @topics } = ();
 }
 
 sub _send_unsubscribe {
@@ -260,7 +260,7 @@ sub _send_unsubscribe {
         pack("(n/a*)*", @topics)
     ));
 
-    delete @{ $self->{subscribed} }{ @topics };
+    delete @{ $self->{actually_subscribed} }{ @topics };
 }
 
 sub _parse {
@@ -387,7 +387,7 @@ sub subscribe {
     my ($self, @kv) = @_;
 
     while (my ($topic, $callback) = splice @kv, 0, 2) {
-        $self->{sub}->{ $topic } = 1;
+        $self->{subscriptions}->{ $topic } = undef;
         push @{ $self->{callbacks} }, {
             topic => $topic,
             regex => filter_as_regex($topic),
@@ -408,7 +408,7 @@ sub unsubscribe {
       @$cb = grep {$_->{topic} ne $topic} @$cb;
     }
 
-    delete @{ $self->{sub} }{ @topics };
+    delete @{ $self->{subscriptions} }{ @topics };
 }
 
 sub tick {
