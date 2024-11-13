@@ -5,7 +5,7 @@ use warnings;
 
 use IO::Socket::IP;
 
-our $VERSION = '1.30';
+our $VERSION = '1.31';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 60;
@@ -445,13 +445,13 @@ sub tick {
 }
 
 sub once {
-    my ($self, $topic, $callback) = @_;
+    my ($self, $subscribe_topic, $callback) = @_;
 
-    $self->subscribe($topic, sub {
-        my ($topic, $message, $retain) = @_;
+    $self->subscribe($subscribe_topic, sub {
+        my ($received_topic, $message, $retain) = @_;
 
-        $callback->($topic, $message, $retain);
-        $self->unsubscribe($topic);
+        $callback->($received_topic, $message, $retain);
+        $self->unsubscribe($subscribe_topic);
     });
 }
 
