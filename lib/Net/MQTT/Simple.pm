@@ -150,7 +150,7 @@ sub _connect {
     # Reset state
     $self->{last_connect} = time;
     $self->{buffer} = "";
-    $self->{subscribed} = {};
+    $self->{actually_subscribed} = {};
     delete $self->{ping};
 
     # Connect
