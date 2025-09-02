@@ -5,7 +5,10 @@ WriteMakefile(
     VERSION_FROM  => 'lib/Net/MQTT/Simple.pm',
     ABSTRACT_FROM => 'lib/Net/MQTT/Simple.pm',
     EXE_FILES     => [ 'bin/mqtt-simple' ],
-    PREREQ_PM     => { },
+    PREREQ_PM     => {
+                      'IO::Socket::IP'  => 0,
+                      'IO::Socket::SSL' => 0,
+                     },
     AUTHOR        => 'Juerd Waalboer <juerd@cpan.org>',
     META_MERGE => {
         'meta-spec' => { version => 2 },
