@@ -66,6 +66,15 @@ sub import {
     *{ (caller)[0] . "::mqtt_get" } = \&get;
 }
 
+sub _reset_connection_state {
+    my ($self) = @_;
+
+    $self->{buffer} = "";
+    $self->{actually_subscribed} = {};
+    delete $self->{ping};
+}
+
+
 sub new {
     my ($class, $server, $sockopts) = @_;
     @_ == 2 or @_ == 3 or _croak "Wrong number of arguments for $class->new";
@@ -78,12 +87,12 @@ sub new {
     # Add port for bare IPv4 address or bracketed IPv6 address
     $server .= ":$port" if $server !~ /:/ or $server =~ /^\[.*\]$/;
 
-    return bless {
+    my $self = bless {
         server       => $server,
-        last_connect => 0,
         sockopts     => $sockopts // {},
     }, $class;
 
+    $self->_reset_connection_state;
     return $self;
 }
 
@@ -149,11 +158,8 @@ sub _connect {
         return;
     }
 
-    # Reset state
+    $self->_reset_connection_state;
     $self->{last_connect} = time;
-    $self->{buffer} = "";
-    $self->{actually_subscribed} = {};
-    delete $self->{ping};
 
     # Connect
     my $socket_class = $self->_socket_class;
