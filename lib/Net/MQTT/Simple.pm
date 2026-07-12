@@ -297,7 +297,7 @@ sub _parse {
     if ($length > $MAX_LENGTH) {
         # On receiving an enormous packet, just disconnect to avoid exhausting
         # RAM on tiny systems.
-        # TODO: just slurp and drop the data
+        # TODO: optionally just slurp and drop the data
         $self->_drop_connection;
         return;
     }
