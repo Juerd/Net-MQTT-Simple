@@ -20,6 +20,15 @@ our $PROTOCOL_NAME = "MQTT";  # MQIsdp in v3.1, MQTT in v3.1.1
 
 my $global;
 
+# MQTT 3.1.1 spec 3.2.2.3.
+my %CONNACK_ERROR = (
+    1 => "Unacceptable protocol version",
+    2 => "Identifier rejected",
+    3 => "Server unavailable",
+    4 => "Bad user name or password",
+    5 => "Not authorized",
+);
+
 sub _default_port { 1883 }
 sub _socket_class { 'IO::Socket::IP' }
 sub _socket_error { "$@" }
@@ -91,6 +100,7 @@ sub new {
     my $self = bless {
         server       => $server,
         sockopts     => $sockopts // {},
+        warnings     => 1,
     }, $class;
 
     $self->_reset_connection_state(0);
@@ -147,6 +157,14 @@ sub login {
     }
 
     return $username;
+}
+
+
+sub warnings {
+    my ($self, $new) = @_;
+
+    $self->{warnings} = $new if @_ > 1;
+    return $self->{warnings};
 }
 
 sub _connect {
@@ -336,6 +354,32 @@ sub _incoming_publish {
     }
 }
 
+sub _incoming_connack {
+    my ($self, $packet) = @_;
+
+    my ($flags, $code) = unpack "C C", $packet->{data};
+    return if $code == 0;
+
+    my $reason = $CONNACK_ERROR{$code} // "unknown error";
+    warn "$0: connection refused by $self->{server} ($code: $reason)\n"
+        if $self->{warnings};
+
+    $self->_drop_connection(1);
+}
+
+sub _incoming_suback {
+    my ($self, $packet) = @_;
+
+    $self->{warnings} or return;
+
+    my (undef, @codes) = unpack "n C*", $packet->{data};
+
+    for my $code (@codes) {
+        warn "$0: subscription refused by $self->{server}\n"
+            if $code == 0x80;
+    }
+}
+
 sub _publish {
     my ($self, $retain, $topic, $message) = @_;
 
@@ -432,12 +476,21 @@ sub tick {
     vec($r, fileno($socket), 1) = 1;
 
     if (select($r, undef, undef, $timeout // 0) > 0) {
-        sysread $socket, $$bufref, $READ_BYTES, length $$bufref
-            or delete $self->{socket};
+        my $n = sysread $socket, $$bufref, $READ_BYTES, length $$bufref;
+        if (not defined $n) {
+            warn "$0: Error reading from $self->{server}: $!" if $self->{warnings};
+            $self->_drop_connection(0);
+        }
+        if ($n == 0) {
+            warn "$0: $self->{server} closed connection.\n" if $self->{warnings};
+            $self->_drop_connection(1);
+        }
 
         while (length $$bufref) {
             my $packet = $self->_parse() or last;
+            $self->_incoming_connack($packet) if $packet->{type} == 2;
             $self->_incoming_publish($packet) if $packet->{type} == 3;
+            $self->_incoming_suback($packet)  if $packet->{type} == 9;
             delete $self->{ping}              if $packet->{type} == 13;
         }
     }
@@ -447,6 +500,7 @@ sub tick {
         $self->{ping} = time;
     }
     if ($self->{ping} and time() >= $self->{ping} + $PING_TIMEOUT) {
+        warn "$0: $self->{server} ping timout.\n";
         $self->_drop_connection;
     }
 
@@ -519,10 +573,12 @@ sub disconnect {
 }
 
 sub _drop_connection {
-    my ($self) = @_;
+    my ($self, $throttle) = @_;
 
     delete $self->{socket};
-    $self->{last_connect} = 0;
+
+    # Ignore $RECONNECT_INTERVAL except if we know it's our fault.
+    $self->{last_connect} = 0 unless $throttle;
 }
 
 1;
