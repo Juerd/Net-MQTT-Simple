@@ -84,6 +84,12 @@ sub _reset_connection_state {
     delete $self->{ping};
 }
 
+sub _warn {
+    my ($self, $warning) = @_;
+    $self->{warnings} or return;
+    warn "$self->{server}: $warning\n";
+}
+
 
 sub new {
     my ($class, $server, $sockopts) = @_;
@@ -360,23 +366,17 @@ sub _incoming_connack {
     my ($flags, $code) = unpack "C C", $packet->{data};
     return if $code == 0;
 
-    my $reason = $CONNACK_ERROR{$code} // "unknown error";
-    warn "$0: connection refused by $self->{server} ($code: $reason)\n"
-        if $self->{warnings};
-
+    my $reason = $CONNACK_ERROR{$code} // "Unknown connection error";
+    $self->_warn("$reason (code $code)");
     $self->_drop_connection(1);
 }
 
 sub _incoming_suback {
     my ($self, $packet) = @_;
 
-    $self->{warnings} or return;
-
     my (undef, @codes) = unpack "n C*", $packet->{data};
-
     for my $code (@codes) {
-        warn "$0: subscription refused by $self->{server}\n"
-            if $code == 0x80;
+        $self->_warn("subscription refused") if $code == 0x80;
     }
 }
 
@@ -478,11 +478,11 @@ sub tick {
     if (select($r, undef, undef, $timeout // 0) > 0) {
         my $n = sysread $socket, $$bufref, $READ_BYTES, length $$bufref;
         if (not defined $n) {
-            warn "$0: Error reading from $self->{server}: $!" if $self->{warnings};
+            $self->warn("read: $!");
             $self->_drop_connection(0);
         }
         if ($n == 0) {
-            warn "$0: $self->{server} closed connection.\n" if $self->{warnings};
+            $self->_warn("Connection closed by server");
             $self->_drop_connection(1);
         }
 
@@ -500,7 +500,7 @@ sub tick {
         $self->{ping} = time;
     }
     if ($self->{ping} and time() >= $self->{ping} + $PING_TIMEOUT) {
-        warn "$0: $self->{server} ping timout.\n";
+        $self->_warn("Ping timeout");
         $self->_drop_connection;
     }
 
