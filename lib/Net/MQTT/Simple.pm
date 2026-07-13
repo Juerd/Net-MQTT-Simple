@@ -5,6 +5,7 @@ use warnings;
 
 use IO::Socket::IP;
 use Socket ();
+use Errno ();
 
 our $VERSION = '2.0.0-alpha';
 
@@ -483,7 +484,8 @@ sub tick {
     if (select($r, undef, undef, $timeout // 0) > 0) {
         my $n = sysread $socket, $$bufref, $READ_BYTES, length $$bufref;
         if (not defined $n) {
-            $self->_drop_connection(0, "read: $!");
+            $self->_drop_connection(0, "read: $!")
+                unless $! == Errno::EINTR;
         } elsif ($n == 0) {
             $self->_drop_connection(1, "Connection closed by server");
         }
