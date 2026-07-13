@@ -226,12 +226,14 @@ sub _send {
 
     my $socket = $self->{socket} or return;
 
-    while (my $chunk = substr $data, 0, $WRITE_BYTES, "") {
-        my $n = syswrite $socket, $chunk;
-        if (not defined $n) {
-            $self->_drop_connection(0, "write: $!");
-        } elsif ($n < length($chunk)) {
-            $self->_drop_connection(0, "short write");
+    my $offset = 0;
+    my $len = length $data;
+    while ($offset < $len) {
+        my $n = syswrite $socket, $data, $len - $offset, $offset;
+        if (defined $n) {
+            $offset += $n;
+        } elsif ($! != Errno::EINTR) {
+            return $self->_drop_connection(0, "write: $!");
         }
     }
 
