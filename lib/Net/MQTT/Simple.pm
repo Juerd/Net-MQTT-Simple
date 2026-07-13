@@ -1,11 +1,16 @@
 package Net::MQTT::Simple;
 
-use strict;
+use v5.20;
 use warnings;
 
-use IO::Socket::IP;
+use feature 'signatures';
+no warnings 'experimental::signatures';  # 5.20 .. 5.34
+# NOTE Can't use "//=" and "||=" in signatures (added in 5.38).
+
+use IO::Socket::IP ();
 use Socket ();
 use Errno ();
+use Scalar::Util ();
 
 our $VERSION = '2.0.0-alpha';
 
@@ -30,13 +35,18 @@ my %CONNACK_ERROR = (
     5 => "Not authorized",
 );
 
+
+# To detecting if argument is given with signature: sub x($foo = UNSET)
+use constant UNSET => do { \my $dummy };
+sub _is_unset($x) { (Scalar::Util::refaddr($x)//0) == Scalar::Util::refaddr(UNSET) }
+sub _is_set($x) { !_is_unset $x; }
+
 sub _default_port { 1883 }
 sub _socket_class { 'IO::Socket::IP' }
 sub _socket_error { "$@" }
 sub _secure { 0 }
 
-sub _client_identifier {
-    my ($self) = @_;
+sub _client_identifier($self) {
     $self->{random_id} //= join "", map chr 65 + int rand 26, 1 .. 10;
     return "Net::MQTT::Simple[" . $self->{random_id} . "]";
 }
@@ -46,8 +56,7 @@ sub _croak {
     die sprintf "%s at %s line %d.\n", "@_", (caller 1)[1, 2];
 }
 
-sub filter_as_regex {
-    my ($filter) = @_;
+sub filter_as_regex($filter) {
 
     return "^(?!\\\$)" if $filter eq '#';   # Match everything except /^\$/
     return "^/"        if $filter eq '/#';  # Parent (empty topic) is invalid
@@ -62,40 +71,31 @@ sub filter_as_regex {
     return "^$filter";
 }
 
-sub import {
-    my ($class, $server) = @_;
-    @_ <= 2 or _croak "Too many arguments for use " . __PACKAGE__;
-
-    $server or return;
+sub import($class, $server = UNSET) {
+    _is_set $server or return;
 
     $global = $class->new($server);
 
     no strict 'refs';
-    *{ (caller)[0] . "::publish" }  = \&publish;
-    *{ (caller)[0] . "::retain"  }  = \&retain;
-    *{ (caller)[0] . "::mqtt_get" } = \&get;
+    *{ (caller)[0] . "::publish" }  = sub($t, $m) { $global->publish($t, $m) };
+    *{ (caller)[0] . "::retain"  }  = sub($t, $m=undef) { $global->retain($t, $m) };
+    *{ (caller)[0] . "::mqtt_get" } = sub($t) { $global->get($t) };
 }
 
-sub _reset_connection_state {
-    my ($self, $last_connect) = @_;
-
+sub _reset_connection_state($self, $last_connect) {
     $self->{buffer} = "";
     $self->{actually_subscribed} = {};
     $self->{last_connect} = $last_connect;
     delete $self->{ping};
 }
 
-sub _warn {
-    my ($self, $warning) = @_;
+sub _warn($self, $warning) {
     $self->{warnings} or return;
     warn "$self->{server}: $warning\n";
 }
 
 
-sub new {
-    my ($class, $server, $sockopts) = @_;
-    @_ == 2 or @_ == 3 or _croak "Wrong number of arguments for $class->new";
-
+sub new($class, $server, $sockopts = {}) {
     my $port = $class->_default_port;
 
     # Add port for bare IPv6 address
@@ -106,7 +106,7 @@ sub new {
 
     my $self = bless {
         server       => $server,
-        sockopts     => $sockopts // {},
+        sockopts     => $sockopts,
         warnings     => 1,
     }, $class;
 
@@ -114,15 +114,11 @@ sub new {
     return $self;
 }
 
-sub last_will {
-    my ($self, $topic, $message, $retain) = @_;
-
+sub last_will($self, $topic = UNSET, $message = undef, $retain = 0) {
     my %old;
     %old = %{ $self->{will} } if $self->{will};
 
-    _croak "Wrong number of arguments for last_will" if @_ > 4;
-
-    if (@_ >= 2) {
+    if (_is_set $topic) {
         if (not defined $topic and not defined $message) {
             delete $self->{will};
             delete $self->{encoded_will};
@@ -149,11 +145,8 @@ sub last_will {
     return @{ $self->{will} }{qw/topic message retain/};
 }
 
-sub login {
-    my ($self, $username, $password) = @_;
-
-
-    if (@_ > 1) {
+sub login($self, $username = UNSET, $password = undef) {
+    if (_is_set $username) {
         _croak "Password login is disabled for insecure connections"
             if defined $password
             and not $self->_secure || $ENV{MQTT_SIMPLE_ALLOW_INSECURE_LOGIN};
@@ -167,16 +160,12 @@ sub login {
 }
 
 
-sub warnings {
-    my ($self, $new) = @_;
-
-    $self->{warnings} = $new if @_ > 1;
+sub warnings($self, $new = UNSET) {
+    $self->{warnings} = $new if _is_set $new;
     return $self->{warnings};
 }
 
-sub _connect {
-    my ($self) = @_;
-
+sub _connect($self) {
     return if $self->{socket} and $self->{socket}->connected;
 
     if ($self->{last_connect} > time() - $RECONNECT_INTERVAL) {
@@ -205,9 +194,8 @@ sub _connect {
     $self->_send_subscribe;
 }
 
-sub _prepend_variable_length {
+sub _prepend_variable_length($data) {
     # Copied from Net::MQTT::Constants
-    my ($data) = @_;
     my $v = length $data;
     my $o = "";
     my $d;
@@ -220,9 +208,7 @@ sub _prepend_variable_length {
     return "$o$data";
 }
 
-sub _send {
-    my ($self, $data) = @_;
-
+sub _send($self, $data) {
     $self->_connect unless exists $self->{skip_connect};
 
     my $socket = $self->{socket} or return;
@@ -241,9 +227,7 @@ sub _send {
     $self->{last_send} = time;
 }
 
-sub _send_connect {
-    my ($self) = @_;
-
+sub _send_connect($self) {
     my $will = $self->{encoded_will};
     my $flags = 0x02;
     $flags |= 0x04 if $will;
@@ -268,9 +252,7 @@ sub _send_connect {
     )));
 }
 
-sub _send_subscribe {
-    my ($self) = @_;
-
+sub _send_subscribe($self) {
     my @topics = grep {
         not exists $self->{actually_subscribed}->{$_}
     } keys %{ $self->{subscriptions} };
@@ -288,9 +270,7 @@ sub _send_subscribe {
     @{ $self->{actually_subscribed} }{ @topics } = ();
 }
 
-sub _send_unsubscribe {
-    my ($self, @topics) = @_;
-
+sub _send_unsubscribe($self, @topics) {
     return if not @topics;
 
     utf8::encode($_) for @topics;
@@ -303,9 +283,7 @@ sub _send_unsubscribe {
     delete @{ $self->{actually_subscribed} }{ @topics };
 }
 
-sub _parse {
-    my ($self) = @_;
-
+sub _parse($self) {
     my $bufref = \$self->{buffer};
 
     return if length $$bufref < 2;
@@ -353,9 +331,7 @@ sub _parse {
     return $packet;
 }
 
-sub _incoming_publish {
-    my ($self, $packet) = @_;
-
+sub _incoming_publish($self, $packet) {
     # Because QoS is not supported, no packed ID in the data. It would
     # have been 16 bits between $topic and $message.
     my ($topic, $message) = unpack "n/a a*", $packet->{data};
@@ -370,9 +346,7 @@ sub _incoming_publish {
     }
 }
 
-sub _incoming_connack {
-    my ($self, $packet) = @_;
-
+sub _incoming_connack($self, $packet) {
     my ($flags, $code) = unpack "C C", $packet->{data};
     return if $code == 0;
 
@@ -380,18 +354,14 @@ sub _incoming_connack {
     $self->_drop_connection(1, "$reason (code $code)");
 }
 
-sub _incoming_suback {
-    my ($self, $packet) = @_;
-
+sub _incoming_suback($self, $packet) {
     my (undef, @codes) = unpack "n C*", $packet->{data};
     for my $code (@codes) {
         $self->_warn("subscription refused") if $code == 0x80;
     }
 }
 
-sub _publish {
-    my ($self, $retain, $topic, $message) = @_;
-
+sub _publish($self, $retain, $topic, $message) {
     $message //= "" if $retain;
 
     utf8::encode($topic);
@@ -409,23 +379,15 @@ sub _publish {
     );
 }
 
-sub publish {
-    my $method = UNIVERSAL::isa($_[0], __PACKAGE__);
-    @_ == ($method ? 3 : 2) or _croak "Wrong number of arguments for publish";
-
-    ($method ? shift : $global)->_publish(0, @_);
+sub publish($self, $topic, $message) {
+    $self->_publish(0, $topic, $message);
 }
 
-sub retain {
-    my $method = UNIVERSAL::isa($_[0], __PACKAGE__);
-    @_ == ($method ? 3 : 2) or _croak "Wrong number of arguments for retain";
-
-    ($method ? shift : $global)->_publish(1, @_);
+sub retain($self, $topic, $message) {
+    $self->_publish(1, $topic, $message);
 }
 
-sub run {
-    my ($self, @subscribe_args) = @_;
-
+sub run($self, @subscribe_args) {
     $self->subscribe(@subscribe_args) if @subscribe_args;
 
     until ($self->{stop_loop}) {
@@ -445,9 +407,7 @@ sub run {
     delete $self->{stop_loop};
 }
 
-sub subscribe {
-    my ($self, @kv) = @_;
-
+sub subscribe($self, @kv) {
     while (my ($topic, $callback) = splice @kv, 0, 2) {
         $self->{subscriptions}->{ $topic } = undef;
         push @{ $self->{callbacks} }, {
@@ -460,9 +420,7 @@ sub subscribe {
     $self->_send_subscribe() if $self->{socket};
 }
 
-sub unsubscribe {
-    my ($self, @topics) = @_;
-
+sub unsubscribe($self, @topics) {
     $self->_send_unsubscribe(@topics);
 
     my $cb = $self->{callbacks};
@@ -473,9 +431,7 @@ sub unsubscribe {
     delete @{ $self->{subscriptions} }{ @topics };
 }
 
-sub tick {
-    my ($self, $timeout) = @_;
-
+sub tick($self, $timeout = 0) {
     $self->_connect;
 
     my $socket = $self->{socket} or return;
@@ -484,7 +440,7 @@ sub tick {
     my $r = '';
     vec($r, fileno($socket), 1) = 1;
 
-    if (select($r, undef, undef, $timeout // 0) > 0) {
+    if (select($r, undef, undef, $timeout) > 0) {
         my $n = sysread $socket, $$bufref, $READ_BYTES, length $$bufref;
         if (not defined $n) {
             $self->_drop_connection(0, "read: $!")
@@ -513,27 +469,17 @@ sub tick {
     return !! $self->{socket};
 }
 
-sub once {
-    my ($self, $subscribe_topic, $callback) = @_;
-
-    $self->subscribe($subscribe_topic, sub {
-        my ($received_topic, $message, $retain) = @_;
-
-        $callback->($received_topic, $message, $retain);
-        $self->unsubscribe($subscribe_topic);
-    });
+sub once($self, $subscribe_topic, $callback) {
+    $self->subscribe(
+        $subscribe_topic,
+        sub($received_topic, $message, $retain) {
+            $callback->($received_topic, $message, $retain);
+            $self->unsubscribe($subscribe_topic);
+        }
+    );
 }
 
-sub get {
-    my $method = UNIVERSAL::isa($_[0], __PACKAGE__);
-    @_ >= ($method ? 2 : 1)
-        or _croak "Wrong number of arguments for " . ($method ? "get" : "mqtt_get");
-
-    my $self = ($method ? shift : $global);
-    my ($topics, $timeout) = @_;
-
-    $timeout ||= 1;
-
+sub get($self, $topics, $timeout = 1) {
     my $got_ref = ref $topics;
     $topics = [ $topics ] if not $got_ref;
 
@@ -546,9 +492,7 @@ sub get {
         # (e.g. due to wildcards)
         my $topic = $topics->[$i];
 
-        $self->once($topic, sub {
-            my (undef, $message, undef) = @_;
-
+        $self->once($topic, sub($, $message, $) {
             $messages[$i] = $message;
             delete $waiting{$topic};
         });
@@ -566,9 +510,7 @@ sub get {
     return $messages[0];
 }
 
-sub disconnect {
-    my ($self) = @_;
-
+sub disconnect($self) {
     if ($self->{socket} and $self->{socket}->connected) {
         $self->_send(pack "C x", 0xe0);
         $self->{socket}->shutdown(Socket::SHUT_WR);
@@ -578,9 +520,7 @@ sub disconnect {
     $self->_drop_connection(0, undef);
 }
 
-sub _drop_connection {
-    my ($self, $throttle, $warning) = @_;
-
+sub _drop_connection($self, $throttle, $warning) {
     delete $self->{socket};
 
     # Ignore $RECONNECT_INTERVAL except if we know it's our fault.
@@ -628,18 +568,15 @@ Net::MQTT::Simple - Minimal MQTT version 3 interface
     $mqtt->publish("topic/here" => "Message here");
     $mqtt->retain( "topic/here" => "Message here");
 
-    $mqtt->subscribe("topic/here" => sub {
-        my ($topic, $message) = @_;
+    $mqtt->subscribe("topic/here" => sub($topic, $message, $retained, @) {
         ...
     });
 
     $mqtt->run(
-        "sensors/+/temperature" => sub {
-            my ($topic, $message) = @_;
+        "sensors/+/temperature" => sub($topic, $message, @) {
             die "The building's on fire" if $message > 150;
         },
-        "#" => sub {
-            my ($topic, $message) = @_;
+        "#" => sub($topic, $message, @) {
             print "[$topic] $message\n";
         },
     );
@@ -886,6 +823,12 @@ a warning
 
 while the UTF-8 encoded data is passed through. To get rid of the warning, use
 C<utf8::encode($message);>.
+
+=head2 You should use C<, @> in callback signatures
+
+There are currently 3 arguments to subscription callbacks, but more may be
+added in the future. For forward compatibility, use an additional bare C<@> in
+the signature list to ignore superfluous arguments.
 
 =head1 LICENSE
 

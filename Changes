@@ -3,6 +3,13 @@ Revision history for Perl extension Net::MQTT::Simple.
 Incompatible changes are marked with "!!". Incompatibility with and changes in
 "undocumented features" are not always specifically mentioned here.
 
+2.0.0  2026-tbd
+        - Switched to "semantic versioning"
+    !!  - Minimum Perl version bumped from 5.14 (via IO::Socket::IP) to 5.20
+        - New: diagnostic warnings (default on; disable with ->warnings(0)).
+
+
+
 1.33  2025-09-02 18:39
         - Fix: resubscribe after reconnect (Contributed by st0ff3r via GitHub
           #30)
