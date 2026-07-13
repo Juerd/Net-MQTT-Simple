@@ -227,8 +227,12 @@ sub _send {
     my $socket = $self->{socket} or return;
 
     while (my $chunk = substr $data, 0, $WRITE_BYTES, "") {
-        syswrite $socket, $chunk
-            or $self->_drop_connection;  # reconnect on next message
+        my $n = syswrite $socket, $chunk;
+        if (not defined $n) {
+            $self->_drop_connection(0, "write: $!");
+        } elsif ($n < length($chunk)) {
+            $self->_drop_connection(0, "short write");
+        }
     }
 
     $self->{last_send} = time;
@@ -322,7 +326,7 @@ sub _parse {
         # On receiving an enormous packet, just disconnect to avoid exhausting
         # RAM on tiny systems.
         # TODO: optionally just slurp and drop the data
-        $self->_drop_connection;
+        $self->_drop_connection(0, "Incoming packet too big");
         return;
     }
 
@@ -367,8 +371,7 @@ sub _incoming_connack {
     return if $code == 0;
 
     my $reason = $CONNACK_ERROR{$code} // "Unknown connection error";
-    $self->_warn("$reason (code $code)");
-    $self->_drop_connection(1);
+    $self->_drop_connection(1, "$reason (code $code)");
 }
 
 sub _incoming_suback {
@@ -478,12 +481,9 @@ sub tick {
     if (select($r, undef, undef, $timeout // 0) > 0) {
         my $n = sysread $socket, $$bufref, $READ_BYTES, length $$bufref;
         if (not defined $n) {
-            $self->warn("read: $!");
-            $self->_drop_connection(0);
-        }
-        if ($n == 0) {
-            $self->_warn("Connection closed by server");
-            $self->_drop_connection(1);
+            $self->_drop_connection(0, "read: $!");
+        } elsif ($n == 0) {
+            $self->_drop_connection(1, "Connection closed by server");
         }
 
         while (length $$bufref) {
@@ -500,8 +500,7 @@ sub tick {
         $self->{ping} = time;
     }
     if ($self->{ping} and time() >= $self->{ping} + $PING_TIMEOUT) {
-        $self->_warn("Ping timeout");
-        $self->_drop_connection;
+        $self->_drop_connection(0, "Ping timeout");
     }
 
     return !! $self->{socket};
@@ -569,16 +568,18 @@ sub disconnect {
         $self->{socket}->close;
     }
 
-    $self->_drop_connection;
+    $self->_drop_connection(0, undef);
 }
 
 sub _drop_connection {
-    my ($self, $throttle) = @_;
+    my ($self, $throttle, $warning) = @_;
 
     delete $self->{socket};
 
     # Ignore $RECONNECT_INTERVAL except if we know it's our fault.
     $self->{last_connect} = 0 unless $throttle;
+
+    $self->_warn($warning) if defined $warning;
 }
 
 1;
