@@ -67,10 +67,11 @@ sub import {
 }
 
 sub _reset_connection_state {
-    my ($self) = @_;
+    my ($self, $last_connect) = @_;
 
     $self->{buffer} = "";
     $self->{actually_subscribed} = {};
+    $self->{last_connect} = $last_connect;
     delete $self->{ping};
 }
 
@@ -92,7 +93,7 @@ sub new {
         sockopts     => $sockopts // {},
     }, $class;
 
-    $self->_reset_connection_state;
+    $self->_reset_connection_state(0);
     return $self;
 }
 
@@ -158,8 +159,7 @@ sub _connect {
         return;
     }
 
-    $self->_reset_connection_state;
-    $self->{last_connect} = time;
+    $self->_reset_connection_state(time);
 
     # Connect
     my $socket_class = $self->_socket_class;
