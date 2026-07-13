@@ -6,7 +6,7 @@ use warnings;
 use IO::Socket::IP;
 use Socket ();
 
-our $VERSION = '1.33';
+our $VERSION = '2.0.0-alpha';
 
 # Please note that these are not documented and are subject to change:
 our $KEEPALIVE_INTERVAL = 60;
