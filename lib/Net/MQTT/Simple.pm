@@ -313,14 +313,17 @@ sub _parse {
     my $offset = 1;
 
     my $length = do {
-        my $multiplier = 1;
         my $v = 0;
         my $d;
+        my $bytes = 0;
         do {
             return if $offset >= length $$bufref;  # not enough data yet
+            if ($bytes >= 4) {
+                $self->_drop_connection(0, "Malformed packet length");
+                return;
+            }
             $d = unpack "C", substr $$bufref, $offset++, 1;
-            $v += ($d & 0x7f) * $multiplier;
-            $multiplier *= 128;
+            $v += ($d & 0x7f) << (7 * $bytes++);
         } while ($d & 0x80);
         $v;
     };
